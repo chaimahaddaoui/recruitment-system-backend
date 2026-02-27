@@ -1,57 +1,64 @@
-//auth.service.ts
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UsersService } from 'src/users/users.service';
 import { RegisterDto } from './dto/register.dto';
-import * as bcrypt from 'bcrypt';
 import { LoginDto } from './dto/login.dto';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private usersService: UsersService,
     private jwtService: JwtService,
+    private userService: UsersService,
   ) {}
 
   async register(dto: RegisterDto) {
-    const existing = await this.usersService.findByEmail(dto.email);
-    if (existing) {
-      throw new BadRequestException('Email already exists');
+    // Vérifier si l'utilisateur existe déjà
+    const existingUser = await this.userService.findByEmail(dto.email);
+    if (existingUser) {
+      throw new BadRequestException('User already exists');
     }
 
-  const hashed = await bcrypt.hash(dto.password, 12);
+    // Assigner un rôle par défaut (user) si non spécifié
+    const role = dto.role || 'user';
 
-  const user = await this.usersService.create({
-    email: dto.email,
-    password: hashed,
-  });
+    // Créer l'utilisateur avec le rôle
+    const user = await this.userService.create({
+      email: dto.email,
+      password: dto.password,
+      role,
+    });
 
-  return {
-    id: user.id,
-    email: user.email,
-  };
+    return {
+      message: 'User registered successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+    };
+  }
+
+  async login(dto: LoginDto) {
+    const user = await this.userService.findByEmail(dto.email);
+    const isPasswordValid = user && await this.userService.comparePasswords(dto.password, user.password);
+    
+    if (!user || !isPasswordValid) {
+      throw new BadRequestException('Invalid credentials');
+    }
+
+    const payload = { 
+      sub: user.id, 
+      email: user.email,
+      role: user.role // Inclure le rôle dans le JWT
+    };
+
+    return {
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+    };
+  }
 }
-
-async login(dto: LoginDto) {
-  const user = await this.usersService.findByEmail(dto.email);
-
-  if (!user) {
-    throw new UnauthorizedException('Invalid credentials');
-  }
-
-  const isMatch = await bcrypt.compare(dto.password, user.password);
-
-  if (!isMatch) {
-    throw new UnauthorizedException('Invalid credentials');
-  }
-
-  const payload = {
-    sub: user.id,
-    email: user.email,
-    role: user.role,
-  };
-
-  return {
-    access_token: this.jwtService.sign(payload),
-  };
-}}
