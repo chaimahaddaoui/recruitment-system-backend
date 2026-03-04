@@ -1,6 +1,5 @@
 generator client {
-  provider = "prisma-client-js"  // ← Changé
-  // Supprimé output
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -8,9 +7,38 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//  Enum pour les rôles
+enum Role {
+  CANDIDATE
+  RECRUITER
+  HR_MANAGER
+  ADMIN
+}
+
+// Enum pour les statuts
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
 model User {
-  id       Int    @id @default(autoincrement())
-  email    String @unique
-  password String
-  role     String @default("USER")
+  id                    Int         @id @default(autoincrement())
+  email                 String      @unique
+  password              String
+  firstName             String      @default("") @map("first_name")
+  lastName              String      @default("") @map("last_name")
+  phone                 String?
+  role                  Role        @default(CANDIDATE)
+  status                UserStatus  @default(ACTIVE)
+  
+  // Tokens
+  refreshToken          String?     @map("refresh_token")
+  
+  // Timestamps
+  lastLogin             DateTime?   @map("last_login")
+  createdAt             DateTime    @default(now()) @map("created_at")
+  updatedAt             DateTime    @updatedAt @map("updated_at")
+
+  @@map("users")
 }

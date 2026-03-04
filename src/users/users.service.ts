@@ -1,11 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
-import { User } from '@prisma/client'; 
+import { PrismaService } from '../prisma/prisma.service';
+import { User, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
-  usersRepository: any;
   constructor(private readonly prisma: PrismaService) {}
 
   async findByEmail(email: string): Promise<User | null> {
@@ -14,28 +13,56 @@ export class UsersService {
     });
   }
 
-  async create(createUserDto: any) {
-  const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-
-  const user = this.prisma.user.create({
-    data: {
-      email: createUserDto.email,
-      password: hashedPassword,
-      role: createUserDto.role || 'user',
-    },
-  });
-
-  return user;
-}
-  async findAll() {
-    
-    return this.prisma.user.findMany();
+  async findById(id: number): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+    });
   }
-  async comparePasswords(
-    plainPassword: string,
-    hashedPassword: string,
-  ): Promise<boolean> {
+
+  async create(createUserDto: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    role?: Role;
+  }): Promise<User> {
+    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+
+    return this.prisma.user.create({
+      data: {
+        email: createUserDto.email,
+        password: hashedPassword,
+        firstName: createUserDto.firstName,
+        lastName: createUserDto.lastName,
+        phone: createUserDto.phone,
+        role: createUserDto.role || Role.CANDIDATE,
+      },
+    });
+  }
+
+  async findAll(): Promise<Omit<User, 'password' | 'phone' | 'refreshToken' | 'lastLogin' | 'updatedAt'>[]> {
+    return this.prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async updateLastLogin(userId: number): Promise<void> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { lastLogin: new Date() },
+    });
+  }
+
+  async comparePasswords(plainPassword: string, hashedPassword: string): Promise<boolean> {
     return bcrypt.compare(plainPassword, hashedPassword);
   }
 }
-
