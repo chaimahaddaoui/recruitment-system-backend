@@ -6,6 +6,7 @@ import { UsersModule } from './users/users.module';
 import { CandidateModule } from './candidate/candidate.module';
 import { RecruiterModule } from './recruiter/recruiter.module';
 import { HrManagerModule } from './hr-manager/hr-manager.module';
+import { JobsModule } from './jobs/jobs.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { HrManagerModule } from './hr-manager/hr-manager.module';
     CandidateModule,
     RecruiterModule,
     HrManagerModule,
+    JobsModule,
   ],
 })
 export class AppModule {}

@@ -35,7 +35,7 @@ export class RecruiterController {
   getCandidateDetails(@Param('id') id: string) {
     return {
       message: `Details of candidate ${id}`,
-      candidate: {}, // TODO: Implement
+      candidate: {}, 
     };
   }
 

@@ -31,14 +31,85 @@ model User {
   phone                 String?
   role                  Role        @default(CANDIDATE)
   status                UserStatus  @default(ACTIVE)
-  
-  // Tokens
   refreshToken          String?     @map("refresh_token")
-  
-  // Timestamps
   lastLogin             DateTime?   @map("last_login")
+  
+  // Relations
+  jobsCreated           Job[]       @relation("JobCreator")
+  applications          Application[] @relation("CandidateApplications")
+  
   createdAt             DateTime    @default(now()) @map("created_at")
   updatedAt             DateTime    @updatedAt @map("updated_at")
-
+  
   @@map("users")
+}
+
+enum JobStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum ContractType {
+  CDI
+  CDD
+  STAGE
+  ALTERNANCE
+  FREELANCE
+}
+
+model Job {
+  id                  Int         @id @default(autoincrement())
+  title               String
+  description         String      @db.Text
+  requirements        String      @db.Text
+  location            String
+  contractType        ContractType
+  salaryMin           Int?        @map("salary_min")
+  salaryMax           Int?        @map("salary_max")
+  experienceYears     Int         @map("experience_years")
+  educationLevel      String      @map("education_level")
+  skills              String[]    // Array PostgreSQL
+  
+  status              JobStatus   @default(DRAFT)
+  
+  // Qui a créé l'offre
+  createdById         Int         @map("created_by_id")
+  createdBy           User        @relation("JobCreator", fields: [createdById], references: [id])
+  
+  // Relations
+  applications        Application[]
+  
+  createdAt           DateTime    @default(now()) @map("created_at")
+  updatedAt           DateTime    @updatedAt @map("updated_at")
+  closedAt            DateTime?   @map("closed_at")
+  
+  @@map("jobs")
+}
+
+model Application {
+  id              Int                 @id @default(autoincrement())
+  jobId           Int                 @map("job_id")
+  job             Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  candidateId     Int                 @map("candidate_id")
+  candidate       User                @relation("CandidateApplications", fields: [candidateId], references: [id])
+  
+  cvPath          String?             @map("cv_path")
+  coverLetter     String?             @db.Text @map("cover_letter")
+  
+  status          ApplicationStatus   @default(SUBMITTED)
+  
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  
+  @@map("applications")
+}
+
+enum ApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  INTERVIEW_SCHEDULED
+  ACCEPTED
+  REJECTED
 }
