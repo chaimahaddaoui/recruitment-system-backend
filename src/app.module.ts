@@ -7,6 +7,8 @@ import { CandidateModule } from './candidate/candidate.module';
 import { RecruiterModule } from './recruiter/recruiter.module';
 import { HrManagerModule } from './hr-manager/hr-manager.module';
 import { JobsModule } from './jobs/jobs.module';
+import { AdminModule } from './admin/admin.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { JobsModule } from './jobs/jobs.module';
     RecruiterModule,
     HrManagerModule,
     JobsModule,
+    AdminModule,
+    EmailModule,
   ],
 })
 export class AppModule {}

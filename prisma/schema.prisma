@@ -34,6 +34,9 @@ model User {
   refreshToken          String?     @map("refresh_token")
   lastLogin             DateTime?   @map("last_login")
   
+
+  mustChangePassword    Boolean     @default(false) @map("must_change_password")
+  
   // Relations
   jobsCreated           Job[]       @relation("JobCreator")
   applications          Application[] @relation("CandidateApplications")

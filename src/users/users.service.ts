@@ -41,7 +41,7 @@ export class UsersService {
     });
   }
 
-  async findAll(): Promise<Omit<User, 'password' | 'phone' | 'refreshToken' | 'lastLogin' | 'updatedAt'>[]> {
+  async findAll(): Promise<User[]> {
     return this.prisma.user.findMany({
       select: {
         id: true,
@@ -50,9 +50,10 @@ export class UsersService {
         lastName: true,
         role: true,
         status: true,
+        mustChangePassword: true, 
         createdAt: true,
       },
-    });
+    }) as Promise<User[]>; 
   }
 
   async updateLastLogin(userId: number): Promise<void> {
@@ -64,5 +65,17 @@ export class UsersService {
 
   async comparePasswords(plainPassword: string, hashedPassword: string): Promise<boolean> {
     return bcrypt.compare(plainPassword, hashedPassword);
+  }
+
+  async updatePassword(userId: number, newPassword: string): Promise<void> {
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { 
+        password: hashedPassword,
+        mustChangePassword: false, 
+      },
+    });
   }
 }
