@@ -23,27 +23,26 @@ enum UserStatus {
 }
 
 model User {
-  id                    Int         @id @default(autoincrement())
-  email                 String      @unique
-  password              String
-  firstName             String      @default("") @map("first_name")
-  lastName              String      @default("") @map("last_name")
-  phone                 String?
-  role                  Role        @default(CANDIDATE)
-  status                UserStatus  @default(ACTIVE)
-  refreshToken          String?     @map("refresh_token")
-  lastLogin             DateTime?   @map("last_login")
-  
+  id           Int        @id @default(autoincrement())
+  email        String     @unique
+  password     String
+  firstName    String     @default("") @map("first_name")
+  lastName     String     @default("") @map("last_name")
+  phone        String?
+  role         Role       @default(CANDIDATE)
+  status       UserStatus @default(ACTIVE)
+  refreshToken String?    @map("refresh_token")
+  lastLogin    DateTime?  @map("last_login")
 
-  mustChangePassword    Boolean     @default(false) @map("must_change_password")
-  
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+
   // Relations
-  jobsCreated           Job[]       @relation("JobCreator")
-  applications          Application[] @relation("CandidateApplications")
-  
-  createdAt             DateTime    @default(now()) @map("created_at")
-  updatedAt             DateTime    @updatedAt @map("updated_at")
-  
+  jobsCreated  Job[]         @relation("JobCreator")
+  applications Application[] @relation("CandidateApplications")
+  interviews   Interview[]   @relation("UserInterviews")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
   @@map("users")
 }
 
@@ -62,50 +61,55 @@ enum ContractType {
 }
 
 model Job {
-  id                  Int         @id @default(autoincrement())
-  title               String
-  description         String      @db.Text
-  requirements        String      @db.Text
-  location            String
-  contractType        ContractType
-  salaryMin           Int?        @map("salary_min")
-  salaryMax           Int?        @map("salary_max")
-  experienceYears     Int         @map("experience_years")
-  educationLevel      String      @map("education_level")
-  skills              String[]    // Array PostgreSQL
-  
-  status              JobStatus   @default(DRAFT)
-  
+  id              Int          @id @default(autoincrement())
+  title           String
+  description     String       @db.Text
+  requirements    String       @db.Text
+  location        String
+  contractType    ContractType
+  salaryMin       Int?         @map("salary_min")
+  salaryMax       Int?         @map("salary_max")
+  experienceYears Int          @map("experience_years")
+  educationLevel  String       @map("education_level")
+  skills          String[] // Array PostgreSQL
+
+  status JobStatus @default(DRAFT)
+
   // Qui a créé l'offre
-  createdById         Int         @map("created_by_id")
-  createdBy           User        @relation("JobCreator", fields: [createdById], references: [id])
-  
+  createdById Int  @map("created_by_id")
+  createdBy   User @relation("JobCreator", fields: [createdById], references: [id])
+
   // Relations
-  applications        Application[]
-  
-  createdAt           DateTime    @default(now()) @map("created_at")
-  updatedAt           DateTime    @updatedAt @map("updated_at")
-  closedAt            DateTime?   @map("closed_at")
-  
+  applications Application[]
+
+  publishedAt DateTime?
+
+  hrFeedback String?
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  closedAt  DateTime? @map("closed_at")
+
   @@map("jobs")
 }
 
 model Application {
-  id              Int                 @id @default(autoincrement())
-  jobId           Int                 @map("job_id")
-  job             Job                 @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  
-  candidateId     Int                 @map("candidate_id")
-  candidate       User                @relation("CandidateApplications", fields: [candidateId], references: [id])
-  
-  cvPath          String?             @map("cv_path")
-  coverLetter     String?             @db.Text @map("cover_letter")
-  
-  status          ApplicationStatus   @default(SUBMITTED)
-  
-  createdAt       DateTime            @default(now()) @map("created_at")
-  updatedAt       DateTime            @updatedAt @map("updated_at")
-  
+  id    Int @id @default(autoincrement())
+  jobId Int @map("job_id")
+  job   Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  candidateId Int  @map("candidate_id")
+  candidate   User @relation("CandidateApplications", fields: [candidateId], references: [id])
+
+  cvPath      String? @map("cv_path")
+  coverLetter String? @map("cover_letter") @db.Text
+
+  status ApplicationStatus @default(SUBMITTED)
+
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+  interviews Interview[]
+
   @@map("applications")
 }
 
@@ -115,4 +119,47 @@ enum ApplicationStatus {
   INTERVIEW_SCHEDULED
   ACCEPTED
   REJECTED
+}
+
+model Interview {
+  id Int @id @default(autoincrement())
+
+  applicationId Int
+  application   Application @relation(fields: [applicationId], references: [id])
+
+  type        InterviewType
+  scheduledAt DateTime
+
+  duration Int?
+  location String?
+  notes    String?
+
+  status InterviewStatus @default(SCHEDULED)
+
+  evaluation  String?
+  passed      Boolean?
+  completedAt DateTime?
+
+  interviewerId Int
+  interviewer   User @relation("UserInterviews", fields: [interviewerId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum InterviewType {
+  HR_SCREENING
+  INTERVIEW_TECHNICAL
+  HR_FINAL
+
+  HR
+  TECHNICAL
+  FINAL
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  PASSED
+  FAILED
+  CANCELLED
 }
