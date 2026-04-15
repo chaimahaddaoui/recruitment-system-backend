@@ -148,12 +148,8 @@ model Interview {
 
 enum InterviewType {
   HR_SCREENING
-  INTERVIEW_TECHNICAL
-  HR_FINAL
-
-  HR
   TECHNICAL
-  FINAL
+  HR_FINAL
 }
 
 enum InterviewStatus {

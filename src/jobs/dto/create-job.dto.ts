@@ -4,22 +4,22 @@ import { ContractType } from '@prisma/client';
 export class CreateJobDto {
   @IsString()
   @IsNotEmpty()
-  title: string;
+  title!: string;
 
   @IsString()
   @IsNotEmpty()
-  description: string;
+  description!: string;
 
   @IsString()
   @IsNotEmpty()
-  requirements: string;
+  requirements!: string;
 
   @IsString()
   @IsNotEmpty()
-  location: string;
+  location!: string;
 
   @IsEnum(ContractType)
-  contractType: ContractType;
+  contractType!: ContractType;
 
   @IsOptional()
   @IsInt()
@@ -33,13 +33,13 @@ export class CreateJobDto {
 
   @IsInt()
   @Min(0)
-  experienceYears: number;
+  experienceYears!: number;
 
   @IsString()
   @IsNotEmpty()
-  educationLevel: string;
+  educationLevel!: string;
 
   @IsArray()
   @IsString({ each: true })
-  skills: string[];
+  skills!: string[];
 }

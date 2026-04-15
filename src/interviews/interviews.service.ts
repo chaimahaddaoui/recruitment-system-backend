@@ -31,8 +31,8 @@ export class InterviewsService {
     }
 
     if (
-      createInterviewDto.type === InterviewType.HR ||
-      createInterviewDto.type === InterviewType.FINAL
+     createInterviewDto.type === InterviewType.HR_SCREENING ||
+     createInterviewDto.type === InterviewType.HR_FINAL
     ) {
       // Seul le RH peut planifier les entretiens RH
       if (role !== 'HR_MANAGER' && role !== 'ADMIN') {
@@ -222,7 +222,7 @@ export class InterviewsService {
   // --- Helpers ---
 
   private validateApplicationStatus(currentStatus: ApplicationStatus, interviewType: InterviewType) {
-    if (interviewType === InterviewType.HR) {
+    if (interviewType === InterviewType.HR_SCREENING) {
       if (currentStatus !== ApplicationStatus.UNDER_REVIEW) {
         throw new BadRequestException('Le candidat doit être pré-sélectionné avant l\'entretien RH screening');
       }
@@ -234,7 +234,7 @@ export class InterviewsService {
       }
     }
 
-    if (interviewType === InterviewType.FINAL) {
+    if (interviewType === InterviewType.HR_FINAL) {
       if (currentStatus !== ApplicationStatus.INTERVIEW_SCHEDULED) {
         throw new BadRequestException('Le candidat doit avoir passé l\'entretien technique');
       }
@@ -243,11 +243,11 @@ export class InterviewsService {
 
   private getStatusForInterviewType(type: InterviewType): ApplicationStatus {
     switch (type) {
-      case InterviewType.HR:
+      case InterviewType.HR_SCREENING:
         return ApplicationStatus.INTERVIEW_SCHEDULED;
       case InterviewType.TECHNICAL:
         return ApplicationStatus.INTERVIEW_SCHEDULED;
-      case InterviewType.FINAL:
+      case InterviewType.HR_FINAL:
         return ApplicationStatus.INTERVIEW_SCHEDULED;
       default:
         throw new BadRequestException('Type d\'entretien invalide');
@@ -256,11 +256,11 @@ export class InterviewsService {
 
   private getNextStatusAfterInterview(type: InterviewType): ApplicationStatus {
     switch (type) {
-      case InterviewType.HR:
+      case InterviewType.HR_SCREENING:
         return ApplicationStatus.INTERVIEW_SCHEDULED; // Attend planification technique
       case InterviewType.TECHNICAL:
         return ApplicationStatus.INTERVIEW_SCHEDULED; // Attend planification RH final
-      case InterviewType.FINAL:
+      case InterviewType.HR_FINAL:
         return ApplicationStatus.ACCEPTED; // Candidat accepté !
       default:
         throw new BadRequestException('Type d\'entretien invalide');
