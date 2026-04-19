@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { ApplicationStatus } from '@prisma/client';
@@ -100,7 +100,7 @@ export class ApplicationsService {
     });
   }
 
-  async findAllByJob(jobId: number, recruiterId: number) {
+  /* async findAllByJob(jobId: number, recruiterId: number) {
     // Vérifier que le job appartient au recruteur
     const job = await this.prisma.job.findFirst({
       where: {
@@ -130,7 +130,54 @@ export class ApplicationsService {
         createdAt: 'desc',
       },
     });
+  } */
+   async findAllByJob(jobId: number, userId: number, role: string) {
+  let job;
+
+  //  CAS RECRUITER 
+  if (role === 'RECRUITER') {
+    job = await this.prisma.job.findFirst({
+      where: {
+        id: jobId,
+        createdById: userId,
+      },
+    });
+  } 
+  //  CAS HR / ADMIN → accès à tous les jobs
+  else {
+    job = await this.prisma.job.findUnique({
+      where: {
+        id: jobId,
+      },
+    });
   }
+
+  // ❌ si job introuvable
+  if (!job) {
+    throw new NotFoundException('Offre introuvable ou non autorisée');
+  }
+
+  // ✅ récupérer candidatures
+  return this.prisma.application.findMany({
+    where: { jobId },
+    include: {
+      candidate: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+  });
+}
+
+
 
   async findOne(id: number, userId: number, userRole: string) {
     const application = await this.prisma.application.findUnique({
@@ -176,11 +223,12 @@ export class ApplicationsService {
     return application;
   }
 
-  async updateStatus(
+  /* async updateStatus(
     id: number,
     status: ApplicationStatus,
     recruiterId: number,
-  ) {
+  )
+   {
     // Vérifier que la candidature existe et que le recruteur est autorisé
     const application = await this.prisma.application.findUnique({
       where: { id },
@@ -215,9 +263,9 @@ export class ApplicationsService {
         },
       },
     });
-  }
+  } */
 
-  async delete(id: number, recruiterId: number) {
+  /* async delete(id: number, recruiterId: number) {
     // Vérifier les permissions
     const application = await this.prisma.application.findUnique({
       where: { id },
@@ -237,5 +285,117 @@ export class ApplicationsService {
     return this.prisma.application.delete({
       where: { id },
     });
+  } */
+
+
+
+
+// Pré-sélectionner un candidat (RECRUITER)
+  async shortlist(id: number, recruiterId: number) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: { job: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Candidature introuvable');
+    }
+
+    // Vérifier que c'est bien l'offre du recruteur
+    if (application.job.createdById !== recruiterId) {
+      throw new ForbiddenException('Vous ne pouvez gérer que les candidatures de vos offres');
+    }
+
+    if (application.status !== ApplicationStatus.SUBMITTED) {
+      throw new BadRequestException('Seules les candidatures SUBMITTED peuvent être pré-sélectionnées');
+    }
+
+    return this.prisma.application.update({
+      where: { id },
+      data: { status: ApplicationStatus.SHORTLISTED },
+      include: {
+        candidate: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
   }
+
+  // Rejeter un candidat (RECRUITER ou HR)
+  async reject(id: number, userId: number, role: string) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: { job: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Candidature introuvable');
+    }
+
+    // Vérifier les permissions
+    if (role === 'RECRUITER' && application.job.createdById !== userId) {
+      throw new ForbiddenException('Vous ne pouvez gérer que les candidatures de vos offres');
+    }
+
+    return this.prisma.application.update({
+      where: { id },
+      data: { status: ApplicationStatus.REJECTED },
+      include: {
+        candidate: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+          },
+        },
+      },
+    });
+  }
+
+  // Changer le statut d'une candidature
+  async updateStatus(id: number, status: ApplicationStatus, userId: number, role: string) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: { job: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Candidature introuvable');
+    }
+
+    // Vérifier les permissions
+    if (role === 'RECRUITER' && application.job.createdById !== userId) {
+      throw new ForbiddenException('Vous ne pouvez gérer que les candidatures de vos offres');
+    }
+
+    return this.prisma.application.update({
+      where: { id },
+      data: { status },
+    });
+  }
+
+  // Supprimer une candidature (RECRUITER, HR, ADMIN)
+  async delete(id: number, userId: number, role: string) {
+    const application = await this.prisma.application.findUnique({
+      where: { id },
+      include: { job: true },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Candidature introuvable');
+    }
+
+    if (role === 'RECRUITER' && application.job.createdById !== userId) {
+      throw new ForbiddenException('Vous ne pouvez supprimer que les candidatures de vos offres');
+    }
+
+    return this.prisma.application.delete({
+      where: { id },
+    });
+  }
+
 }

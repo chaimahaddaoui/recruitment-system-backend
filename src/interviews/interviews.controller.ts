@@ -23,46 +23,48 @@ import { Roles } from 'src/auth/roles.decorator';
 export class InterviewsController {
   constructor(private readonly interviewsService: InterviewsService) {}
 
+  // Créer un entretien (RECRUITER, HR_MANAGER, ADMIN)
   @Post()
   @Roles(Role.RECRUITER, Role.HR_MANAGER, Role.ADMIN)
-  create(
-    @Body() dto: CreateInterviewDto,
-    @Req() req: Request & { user?: any },
-  ) {
-    const userId = req.user?.userId || req.user?.sub;
-    const role = req.user?.role;
-    return this.interviewsService.create(dto, userId, role);
+  create(@Req() request: any, @Body() createInterviewDto: CreateInterviewDto) {
+    const userId = request.user?.userId || request.user?.sub;
+    const role = request.user?.role;
+    return this.interviewsService.create(userId, role, createInterviewDto);
   }
 
+  // Évaluer un entretien
   @Patch(':id/evaluate')
   @Roles(Role.RECRUITER, Role.HR_MANAGER, Role.ADMIN)
   evaluate(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: EvaluateInterviewDto,
-    @Req() req: Request & { user?: any },
+    @Req() request: any,
+    @Body() evaluateDto: EvaluateInterviewDto,
   ) {
-    const userId = req.user?.userId || req.user?.sub;
-    return this.interviewsService.evaluate(id, dto, userId);
+    const userId = request.user?.userId || request.user?.sub;
+    const role = request.user?.role;
+    return this.interviewsService.evaluate(id, userId, role, evaluateDto);
   }
 
+  // Annuler un entretien
   @Patch(':id/cancel')
   @Roles(Role.RECRUITER, Role.HR_MANAGER, Role.ADMIN)
-  cancel(
-    @Param('id', ParseIntPipe) id: number,
-    @Req() req: Request & { user?: any },
-  ) {
-    const userId = req.user?.userId || req.user?.sub;
+  cancel(@Param('id', ParseIntPipe) id: number, @Req() request: any) {
+    const userId = request.user?.userId || request.user?.sub;
     return this.interviewsService.cancel(id, userId);
   }
 
-  @Get('application/:applicationId')
-  findByApplication(@Param('applicationId', ParseIntPipe) applicationId: number) {
-    return this.interviewsService.findByApplication(applicationId);
+  // Mes entretiens
+  @Get('my-interviews')
+  @Roles(Role.RECRUITER, Role.HR_MANAGER, Role.ADMIN)
+  getMyInterviews(@Req() request: any) {
+    const userId = request.user?.userId || request.user?.sub;
+    return this.interviewsService.getMyInterviews(userId);
   }
 
-  @Get('my-interviews')
-  findMy(@Req() req: Request & { user?: any }) {
-    const userId = req.user?.userId || req.user?.sub;
-    return this.interviewsService.findByInterviewer(userId);
+  // Entretiens d'une candidature
+  @Get('application/:id')
+  @Roles(Role.RECRUITER, Role.HR_MANAGER, Role.ADMIN)
+  getInterviewsByApplication(@Param('id', ParseIntPipe) id: number) {
+    return this.interviewsService.getInterviewsByApplication(id);
   }
 }

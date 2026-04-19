@@ -114,11 +114,13 @@ model Application {
 }
 
 enum ApplicationStatus {
-  SUBMITTED
-  UNDER_REVIEW
-  INTERVIEW_SCHEDULED
-  ACCEPTED
-  REJECTED
+  SUBMITTED               // Candidature soumise
+  SHORTLISTED             // Pré-sélectionné par recruteur
+  INTERVIEW_HR_SCREENING  // Entretien RH #1 planifié/en cours
+  INTERVIEW_TECHNICAL     // Entretien technique planifié/en cours
+  INTERVIEW_HR_FINAL      // Entretien RH final planifié/en cours
+  ACCEPTED                // Accepté (offre d'embauche)
+  REJECTED                // Rejeté (fin du processus)
 }
 
 model Interview {
@@ -136,26 +138,28 @@ model Interview {
 
   status InterviewStatus @default(SCHEDULED)
 
-  evaluation  String?
-  passed      Boolean?
-  completedAt DateTime?
+  evaluation  String?   // Évaluation détaillée
+  passed      Boolean?  // true = validé, false = échoué
+  completedAt DateTime? // Date de fin d'évaluation
 
   interviewerId Int
   interviewer   User @relation("UserInterviews", fields: [interviewerId], references: [id])
 
   createdAt DateTime @default(now())
+   updatedAt DateTime @updatedAt
 }
 
 enum InterviewType {
-  HR_SCREENING
-  TECHNICAL
-  HR_FINAL
+  HR_SCREENING   // Entretien RH initial (communication, langue)
+  TECHNICAL      // Entretien technique (compétences)
+  HR_FINAL       // Entretien RH final (négociation salaire)
 }
 
+
 enum InterviewStatus {
-  SCHEDULED
-  COMPLETED
-  PASSED
-  FAILED
-  CANCELLED
+  SCHEDULED      // Planifié
+  COMPLETED      // Terminé (en attente d'évaluation)
+  PASSED         // Validé (candidat a réussi)
+  FAILED         // Échoué (candidat n'a pas réussi)
+  CANCELLED      // Annulé
 }

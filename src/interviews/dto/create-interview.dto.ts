@@ -1,4 +1,4 @@
-import { IsInt, IsEnum, IsDateString, IsString, IsOptional, IsNumber } from 'class-validator';
+import { IsInt, IsString, IsEnum, IsOptional, IsDateString } from 'class-validator';
 import { InterviewType } from '@prisma/client';
 
 export class CreateInterviewDto {
@@ -6,20 +6,20 @@ export class CreateInterviewDto {
   applicationId!: number;
 
   @IsEnum(InterviewType)
-  type!: InterviewType;
+  type: InterviewType = "HR_SCREENING";
 
   @IsDateString()
   scheduledAt!: string;
 
+  @IsInt()
   @IsOptional()
-  @IsNumber()
   duration?: number;
 
-  @IsOptional()
   @IsString()
+  @IsOptional()
   location?: string;
 
-  @IsOptional()
   @IsString()
+  @IsOptional()
   notes?: string;
 }

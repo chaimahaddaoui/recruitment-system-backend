@@ -1,49 +1,31 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateInterviewDto } from './dto/create-interview.dto';
 import { EvaluateInterviewDto } from './dto/evaluate-interview.dto';
-import { InterviewType, ApplicationStatus, InterviewStatus } from '@prisma/client';
+import { InterviewType, InterviewStatus, ApplicationStatus, Role } from '@prisma/client';
 
 @Injectable()
 export class InterviewsService {
   constructor(private prisma: PrismaService) {}
 
-  // Planifier un entretien
-  async create(createInterviewDto: CreateInterviewDto, interviewerId: number, role: string) {
+  async create(userId: number, userRole: string, createInterviewDto: CreateInterviewDto) {
     const application = await this.prisma.application.findUnique({
       where: { id: createInterviewDto.applicationId },
-      include: {
-        job: true,
-        interviews: true,
-      },
+      include: { job: true },
     });
 
     if (!application) {
       throw new NotFoundException('Candidature introuvable');
     }
 
-    // Vérifier les permissions selon le type d'entretien
-    if (createInterviewDto.type === InterviewType.TECHNICAL) {
-      // Seul le recruteur qui a créé l'offre peut planifier l'entretien technique
-      if (role === 'RECRUITER' && application.job.createdById !== interviewerId) {
-        throw new ForbiddenException('Seul le recruteur de cette offre peut planifier l\'entretien technique');
-      }
-    }
-
-    if (
-     createInterviewDto.type === InterviewType.HR_SCREENING ||
-     createInterviewDto.type === InterviewType.HR_FINAL
-    ) {
-      // Seul le RH peut planifier les entretiens RH
-      if (role !== 'HR_MANAGER' && role !== 'ADMIN') {
-        throw new ForbiddenException('Seul le RH peut planifier les entretiens RH');
-      }
-    }
-
-    // Vérifier que la candidature est au bon statut
+    this.validatePermissions(userRole, application, createInterviewDto.type);
     this.validateApplicationStatus(application.status, createInterviewDto.type);
 
-    // Créer l'entretien
     const interview = await this.prisma.interview.create({
       data: {
         applicationId: createInterviewDto.applicationId,
@@ -52,9 +34,103 @@ export class InterviewsService {
         duration: createInterviewDto.duration,
         location: createInterviewDto.location,
         notes: createInterviewDto.notes,
-        interviewerId,
+        interviewerId: userId,
         status: InterviewStatus.SCHEDULED,
       },
+    });
+
+    const currentStatus = application.status;
+    const expectedStatus = this.getStatusForInterviewType(createInterviewDto.type);
+
+    if (currentStatus !== expectedStatus) {
+      await this.prisma.application.update({
+        where: { id: createInterviewDto.applicationId },
+        data: { status: expectedStatus },
+      });
+    }
+
+    return interview;
+  }
+
+  async evaluate(
+    interviewId: number,
+    userId: number,
+    userRole: string,
+    evaluateDto: EvaluateInterviewDto,
+  ) {
+    const interview = await this.prisma.interview.findUnique({
+      where: { id: interviewId },
+      include: {
+        application: {
+          include: { job: true },
+        },
+      },
+    });
+
+    if (!interview) {
+      throw new NotFoundException('Entretien introuvable');
+    }
+
+    if (interview.interviewerId !== userId) {
+      throw new ForbiddenException('Vous ne pouvez évaluer que vos propres entretiens');
+    }
+
+    const updatedInterview = await this.prisma.interview.update({
+      where: { id: interviewId },
+      data: {
+        evaluation: evaluateDto.evaluation,
+        passed: evaluateDto.passed,
+        notes: evaluateDto.notes,
+        status: evaluateDto.passed ? InterviewStatus.PASSED : InterviewStatus.FAILED,
+        completedAt: new Date(),
+      },
+    });
+
+    let newApplicationStatus: ApplicationStatus;
+
+    if (evaluateDto.passed) {
+      newApplicationStatus = this.getNextStatusAfterInterview(interview.type);
+    } else {
+      newApplicationStatus = ApplicationStatus.REJECTED;
+    }
+
+    console.log('🔄 Mise à jour statut candidature:', {
+      interviewType: interview.type,
+      passed: evaluateDto.passed,
+      currentStatus: interview.application.status,
+      newStatus: newApplicationStatus,
+    });
+
+    await this.prisma.application.update({
+      where: { id: interview.applicationId },
+      data: { status: newApplicationStatus },
+    });
+
+    return updatedInterview;
+  }
+
+  async cancel(interviewId: number, userId: number) {
+    const interview = await this.prisma.interview.findUnique({
+      where: { id: interviewId },
+    });
+
+    if (!interview) {
+      throw new NotFoundException('Entretien introuvable');
+    }
+
+    if (interview.interviewerId !== userId) {
+      throw new ForbiddenException('Vous ne pouvez annuler que vos propres entretiens');
+    }
+
+    return this.prisma.interview.update({
+      where: { id: interviewId },
+      data: { status: InterviewStatus.CANCELLED },
+    });
+  }
+
+  async getMyInterviews(userId: number) {
+    return this.prisma.interview.findMany({
+      where: { interviewerId: userId },
       include: {
         application: {
           include: {
@@ -77,82 +153,17 @@ export class InterviewsService {
             firstName: true,
             lastName: true,
             email: true,
+            role: true,
           },
         },
       },
-    });
-
-    // Mettre à jour le statut de la candidature
-    const newStatus = this.getStatusForInterviewType(createInterviewDto.type);
-    await this.prisma.application.update({
-      where: { id: createInterviewDto.applicationId },
-      data: { status: newStatus },
-    });
-
-    // TODO: Envoyer email au candidat
-
-    return interview;
-  }
-
-  // Évaluer un entretien
-  async evaluate(id: number, evaluateInterviewDto: EvaluateInterviewDto, interviewerId: number) {
-    const interview = await this.prisma.interview.findUnique({
-      where: { id },
-      include: {
-        application: {
-          include: {
-            job: true,
-          },
-        },
+      orderBy: {
+        scheduledAt: 'asc',
       },
     });
-
-    if (!interview) {
-      throw new NotFoundException('Entretien introuvable');
-    }
-
-    if (interview.interviewerId !== interviewerId) {
-      throw new ForbiddenException('Vous ne pouvez évaluer que vos propres entretiens');
-    }
-
-    if (interview.status === InterviewStatus.COMPLETED) {
-      throw new BadRequestException('Cet entretien a déjà été évalué');
-    }
-
-    // Mettre à jour l'entretien
-    const updatedInterview = await this.prisma.interview.update({
-      where: { id },
-      data: {
-        evaluation: evaluateInterviewDto.evaluation,
-        passed: evaluateInterviewDto.passed,
-        notes: evaluateInterviewDto.notes || interview.notes,
-        status: evaluateInterviewDto.passed ? InterviewStatus.PASSED : InterviewStatus.FAILED,
-        completedAt: new Date(),
-      },
-    });
-
-    // Mettre à jour le statut de la candidature
-    if (evaluateInterviewDto.passed) {
-      const nextStatus = this.getNextStatusAfterInterview(interview.type);
-      await this.prisma.application.update({
-        where: { id: interview.applicationId },
-        data: { status: nextStatus },
-      });
-    } else {
-      // Échec → Rejeté
-      await this.prisma.application.update({
-        where: { id: interview.applicationId },
-        data: { status: ApplicationStatus.REJECTED },
-      });
-    }
-
-    // TODO: Envoyer email au candidat
-
-    return updatedInterview;
   }
 
-  // Voir tous les entretiens d'une candidature
-  async findByApplication(applicationId: number) {
+  async getInterviewsByApplication(applicationId: number) {
     return this.prisma.interview.findMany({
       where: { applicationId },
       include: {
@@ -171,72 +182,45 @@ export class InterviewsService {
     });
   }
 
-  // Voir tous les entretiens planifiés par un utilisateur
-  async findByInterviewer(interviewerId: number) {
-    return this.prisma.interview.findMany({
-      where: { interviewerId },
-      include: {
-        application: {
-          include: {
-            candidate: {
-              select: {
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-            job: {
-              select: {
-                title: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: {
-        scheduledAt: 'asc',
-      },
-    });
-  }
+  // ========== HELPERS ==========
 
-  // Annuler un entretien
-  async cancel(id: number, interviewerId: number) {
-    const interview = await this.prisma.interview.findUnique({
-      where: { id },
-    });
-
-    if (!interview) {
-      throw new NotFoundException('Entretien introuvable');
-    }
-
-    if (interview.interviewerId !== interviewerId) {
-      throw new ForbiddenException('Vous ne pouvez annuler que vos propres entretiens');
-    }
-
-    return this.prisma.interview.update({
-      where: { id },
-      data: { status: InterviewStatus.CANCELLED },
-    });
-  }
-
-  // --- Helpers ---
-
-  private validateApplicationStatus(currentStatus: ApplicationStatus, interviewType: InterviewType) {
-    if (interviewType === InterviewType.HR_SCREENING) {
-      if (currentStatus !== ApplicationStatus.UNDER_REVIEW) {
-        throw new BadRequestException('Le candidat doit être pré-sélectionné avant l\'entretien RH screening');
+  private validatePermissions(userRole: string, application: any, interviewType: InterviewType) {
+    if (interviewType === InterviewType.HR_SCREENING || interviewType === InterviewType.HR_FINAL) {
+      if (userRole !== Role.HR_MANAGER && userRole !== Role.ADMIN) {
+        throw new ForbiddenException('Seul le RH Manager peut planifier des entretiens RH');
       }
     }
 
     if (interviewType === InterviewType.TECHNICAL) {
-      if (currentStatus !== ApplicationStatus.INTERVIEW_SCHEDULED) {
-        throw new BadRequestException('Le candidat doit avoir passé l\'entretien RH screening');
+      if (userRole !== Role.RECRUITER && userRole !== Role.ADMIN) {
+        throw new ForbiddenException('Seul le recruteur peut planifier des entretiens techniques');
+      }
+    }
+  }
+
+  private validateApplicationStatus(currentStatus: ApplicationStatus, interviewType: InterviewType) {
+    if (interviewType === InterviewType.HR_SCREENING) {
+      if (currentStatus !== ApplicationStatus.SHORTLISTED) {
+        throw new BadRequestException(
+          'Le candidat doit être pré-sélectionné avant l\'entretien RH screening',
+        );
+      }
+    }
+
+    if (interviewType === InterviewType.TECHNICAL) {
+      if (currentStatus !== ApplicationStatus.INTERVIEW_HR_SCREENING) {
+        throw new BadRequestException(
+          'Le candidat doit avoir passé l\'entretien RH screening',
+        );
       }
     }
 
     if (interviewType === InterviewType.HR_FINAL) {
-      if (currentStatus !== ApplicationStatus.INTERVIEW_SCHEDULED) {
-        throw new BadRequestException('Le candidat doit avoir passé l\'entretien technique');
+      // ✅ CORRECTION : Vérifier INTERVIEW_HR_FINAL
+      if (currentStatus !== ApplicationStatus.INTERVIEW_HR_FINAL) {
+        throw new BadRequestException(
+          `Le candidat doit avoir passé l'entretien technique (statut actuel: ${currentStatus})`,
+        );
       }
     }
   }
@@ -244,24 +228,32 @@ export class InterviewsService {
   private getStatusForInterviewType(type: InterviewType): ApplicationStatus {
     switch (type) {
       case InterviewType.HR_SCREENING:
-        return ApplicationStatus.INTERVIEW_SCHEDULED;
+        return ApplicationStatus.INTERVIEW_HR_SCREENING;
       case InterviewType.TECHNICAL:
-        return ApplicationStatus.INTERVIEW_SCHEDULED;
+        return ApplicationStatus.INTERVIEW_TECHNICAL;
       case InterviewType.HR_FINAL:
-        return ApplicationStatus.INTERVIEW_SCHEDULED;
+        return ApplicationStatus.INTERVIEW_HR_FINAL;
       default:
         throw new BadRequestException('Type d\'entretien invalide');
     }
   }
 
   private getNextStatusAfterInterview(type: InterviewType): ApplicationStatus {
+    console.log('📋 Type entretien validé:', type);
+
     switch (type) {
       case InterviewType.HR_SCREENING:
-        return ApplicationStatus.INTERVIEW_SCHEDULED; // Attend planification technique
+        console.log('✅ Après RH #1 → Reste INTERVIEW_HR_SCREENING (prêt pour technique)');
+        return ApplicationStatus.INTERVIEW_HR_SCREENING;
+
       case InterviewType.TECHNICAL:
-        return ApplicationStatus.INTERVIEW_SCHEDULED; // Attend planification RH final
+        console.log('✅ Après technique → Passe à INTERVIEW_HR_FINAL (prêt pour RH final)');
+        return ApplicationStatus.INTERVIEW_HR_FINAL;
+
       case InterviewType.HR_FINAL:
-        return ApplicationStatus.ACCEPTED; // Candidat accepté !
+        console.log('✅ Après RH final → Passe à ACCEPTED');
+        return ApplicationStatus.ACCEPTED;
+
       default:
         throw new BadRequestException('Type d\'entretien invalide');
     }
