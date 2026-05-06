@@ -5,18 +5,25 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import { CreateInterviewDto } from './dto/create-interview.dto';
 import { EvaluateInterviewDto } from './dto/evaluate-interview.dto';
 import { InterviewType, InterviewStatus, ApplicationStatus, Role } from '@prisma/client';
 
 @Injectable()
 export class InterviewsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
 
   async create(userId: number, userRole: string, createInterviewDto: CreateInterviewDto) {
     const application = await this.prisma.application.findUnique({
       where: { id: createInterviewDto.applicationId },
-      include: { job: true },
+      include: { 
+        job: true,
+        candidate: true, // ✅ AJOUT pour email
+      },
     });
 
     if (!application) {
@@ -37,6 +44,14 @@ export class InterviewsService {
         interviewerId: userId,
         status: InterviewStatus.SCHEDULED,
       },
+      include: {
+        application: {
+          include: {
+            candidate: true,
+            job: true,
+          },
+        },
+      },
     });
 
     const currentStatus = application.status;
@@ -48,6 +63,17 @@ export class InterviewsService {
         data: { status: expectedStatus },
       });
     }
+
+    // ✅ ENVOI EMAIL : Entretien planifié
+    await this.emailService.sendInterviewScheduled(
+      interview.application.candidate.email,
+      `${interview.application.candidate.firstName} ${interview.application.candidate.lastName}`,
+      interview.application.job.title,
+      createInterviewDto.type,
+      interview.scheduledAt,
+      interview.location ?? 'Non spécifié', 
+      interview.duration ?? 0, // Durée par défaut de 60 minutes si non spécifiée
+    );
 
     return interview;
   }
@@ -62,7 +88,10 @@ export class InterviewsService {
       where: { id: interviewId },
       include: {
         application: {
-          include: { job: true },
+          include: { 
+            job: true,
+            candidate: true, // ✅ AJOUT pour email
+          },
         },
       },
     });
@@ -105,6 +134,40 @@ export class InterviewsService {
       where: { id: interview.applicationId },
       data: { status: newApplicationStatus },
     });
+
+    // ✅ ENVOI EMAIL selon le résultat
+    if (evaluateDto.passed) {
+      const nextSteps: Record<string, string> = {
+        HR_SCREENING: 'Vous passerez prochainement un entretien technique',
+        TECHNICAL: 'Vous passerez prochainement un entretien RH final',
+        HR_FINAL: 'Vous recevrez une offre d\'emploi formelle',
+      };
+
+      if (interview.type === InterviewType.HR_FINAL) {
+        // ✅ Offre d'embauche
+        await this.emailService.sendOfferAccepted(
+          interview.application.candidate.email,
+          `${interview.application.candidate.firstName} ${interview.application.candidate.lastName}`,
+          interview.application.job.title,
+        );
+      } else {
+        // ✅ Passage à l'étape suivante
+        await this.emailService.sendInterviewPassed(
+          interview.application.candidate.email,
+          `${interview.application.candidate.firstName} ${interview.application.candidate.lastName}`,
+          interview.application.job.title,
+          interview.type,
+          nextSteps[interview.type],
+        );
+      }
+    } else {
+      // ✅ Rejet
+      await this.emailService.sendRejection(
+        interview.application.candidate.email,
+        `${interview.application.candidate.firstName} ${interview.application.candidate.lastName}`,
+        interview.application.job.title,
+      );
+    }
 
     return updatedInterview;
   }
@@ -216,7 +279,6 @@ export class InterviewsService {
     }
 
     if (interviewType === InterviewType.HR_FINAL) {
-      // ✅ CORRECTION : Vérifier INTERVIEW_HR_FINAL
       if (currentStatus !== ApplicationStatus.INTERVIEW_HR_FINAL) {
         throw new BadRequestException(
           `Le candidat doit avoir passé l'entretien technique (statut actuel: ${currentStatus})`,

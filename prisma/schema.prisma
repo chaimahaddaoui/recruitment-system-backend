@@ -35,6 +35,11 @@ model User {
   lastLogin    DateTime?  @map("last_login")
 
   mustChangePassword Boolean @default(false) @map("must_change_password")
+  
+
+//  Champs pour la réinitialisation du mot de passe
+  resetToken       String?   @db.Text
+  resetTokenExpiry DateTime?
 
   // Relations
   jobsCreated  Job[]         @relation("JobCreator")
