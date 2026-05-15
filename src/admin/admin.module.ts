@@ -10,3 +10,4 @@ import { EmailModule } from '../email/email.module';
   providers: [AdminService],
 })
 export class AdminModule {}
+

@@ -4,20 +4,20 @@ import { Role } from '@prisma/client';
 export class CreateUserDto {
   @IsEmail()
   @IsNotEmpty()
-  email: string;
+  email!: string;
 
   @IsString()
   @IsNotEmpty()
-  firstName: string;
+  firstName!: string;
 
   @IsString()
   @IsNotEmpty()
-  lastName: string;
+  lastName!: string;
 
   @IsOptional()
   @IsString()
   phone?: string;
 
   @IsEnum(Role)
-  role: Role;
+  role!: Role;
 }

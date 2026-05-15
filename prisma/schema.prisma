@@ -106,9 +106,10 @@ model Application {
   candidateId Int  @map("candidate_id")
   candidate   User @relation("CandidateApplications", fields: [candidateId], references: [id])
 
-  cvPath      String? @map("cv_path")
+  cvPath String @map("cv_path")
   coverLetter String? @map("cover_letter") @db.Text
-
+  aiMatchScore  Float?        // Score de matching (0-100)
+  aiAnalysis    Json?         // Analyse détaillée IA (JSON)
   status ApplicationStatus @default(SUBMITTED)
 
   createdAt  DateTime    @default(now()) @map("created_at")

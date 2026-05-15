@@ -75,7 +75,7 @@ export class ApplicationsController {
       throw new BadRequestException('Utilisateur non authentifié');
     }
 
-    const cvPath = `/uploads/cvs/${file.filename}`;
+    const cvPath = `/uploads/${file.filename}`;
 
     return this.applicationsService.create(userId, {
       ...createApplicationDto,

@@ -12,6 +12,7 @@ import { EmailModule } from './email/email.module';
 import { ApplicationsModule } from './applications/applications.module';
 import { InterviewsModule } from './interviews/interviews.module';
 import { UploadsModule } from './uploads/uploads.module';
+import { DjangoAiModule } from './django-ai/django-ai.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { UploadsModule } from './uploads/uploads.module';
     ApplicationsModule,
     InterviewsModule,
     UploadsModule,
+    DjangoAiModule,
   ],
 })
 export class AppModule {}

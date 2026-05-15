@@ -8,6 +8,7 @@ import {
   UseGuards,
   Req,
   ParseIntPipe,
+  Query,
 } from '@nestjs/common';
 import { InterviewsService } from './interviews.service';
 import { CreateInterviewDto } from './dto/create-interview.dto';
@@ -30,6 +31,15 @@ export class InterviewsController {
     const userId = request.user?.userId || request.user?.sub;
     const role = request.user?.role;
     return this.interviewsService.create(userId, role, createInterviewDto);
+  }
+
+  // ✅ Nouveau : disponibilité du recruteur/RH connecté
+  // Exemple : GET /interviews/availability?date=2026-02-06
+  @Get('availability')
+  @Roles(Role.RECRUITER, Role.HR_MANAGER, Role.ADMIN)
+  getAvailability(@Req() request: any, @Query('date') date: string) {
+    const userId = request.user?.userId || request.user?.sub;
+    return this.interviewsService.getAvailability(userId, date);
   }
 
   // Évaluer un entretien

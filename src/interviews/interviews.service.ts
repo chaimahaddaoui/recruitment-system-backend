@@ -1,4 +1,4 @@
-import {
+/* import {
   Injectable,
   NotFoundException,
   BadRequestException,
@@ -12,6 +12,9 @@ import { InterviewType, InterviewStatus, ApplicationStatus, Role } from '@prisma
 
 @Injectable()
 export class InterviewsService {
+  getAvailability(userId: any, date: string) {
+    throw new Error('Method not implemented.');
+  }
   constructor(
     private prisma: PrismaService,
     private emailService: EmailService,
@@ -319,5 +322,389 @@ export class InterviewsService {
       default:
         throw new BadRequestException('Type d\'entretien invalide');
     }
+  }
+} */
+
+  import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  ApplicationStatus,
+  InterviewStatus,
+  InterviewType,
+  Role,
+} from '@prisma/client';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { CreateInterviewDto } from './dto/create-interview.dto';
+import { EvaluateInterviewDto } from './dto/evaluate-interview.dto';
+
+@Injectable()
+export class InterviewsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(userId: number, role: Role, dto: CreateInterviewDto) {
+    const application = await this.prisma.application.findUnique({
+      where: { id: dto.applicationId },
+      include: {
+        job: true,
+        candidate: true,
+      },
+    });
+
+    if (!application) {
+      throw new NotFoundException('Candidature introuvable');
+    }
+
+    const scheduledAt = new Date(dto.scheduledAt);
+    const duration = dto.duration || 60;
+
+    if (isNaN(scheduledAt.getTime())) {
+      throw new BadRequestException('Date d’entretien invalide');
+    }
+
+    if (duration <= 0) {
+      throw new BadRequestException('La durée doit être supérieure à 0');
+    }
+
+    const newInterviewEnd = new Date(scheduledAt);
+    newInterviewEnd.setMinutes(newInterviewEnd.getMinutes() + duration);
+
+    /**
+     * Vérification des conflits :
+     * Un conflit existe si :
+     * nouvelDébut < ancienFin ET nouvelFin > ancienDébut
+     */
+    const sameDayStart = new Date(scheduledAt);
+    sameDayStart.setHours(0, 0, 0, 0);
+
+    const sameDayEnd = new Date(scheduledAt);
+    sameDayEnd.setHours(23, 59, 59, 999);
+
+    const interviewsOfDay = await this.prisma.interview.findMany({
+      where: {
+        interviewerId: Number(userId),
+        status: {
+          not: InterviewStatus.CANCELLED,
+        },
+        scheduledAt: {
+          gte: sameDayStart,
+          lte: sameDayEnd,
+        },
+      },
+    });
+
+    const conflict = interviewsOfDay.find((interview) => {
+      const existingStart = new Date(interview.scheduledAt);
+      const existingEnd = new Date(existingStart);
+      existingEnd.setMinutes(
+        existingEnd.getMinutes() + (interview.duration || 60),
+      );
+
+      return scheduledAt < existingEnd && newInterviewEnd > existingStart;
+    });
+
+    if (conflict) {
+      throw new BadRequestException(
+        'Ce créneau est déjà réservé. Veuillez choisir un autre horaire.',
+      );
+    }
+
+    const interview = await this.prisma.interview.create({
+      data: {
+        applicationId: dto.applicationId,
+        type: dto.type as InterviewType,
+        scheduledAt,
+        duration,
+        location: dto.location,
+        notes: dto.notes,
+        interviewerId: Number(userId),
+        status: InterviewStatus.SCHEDULED,
+      },
+      include: {
+        application: {
+          include: {
+            candidate: true,
+            job: true,
+          },
+        },
+        interviewer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    await this.updateApplicationStatus(dto.applicationId, dto.type as InterviewType);
+
+    return interview;
+  }
+
+  async getAvailability(userId: number, date: string) {
+    if (!date) {
+      throw new BadRequestException('La date est obligatoire');
+    }
+
+    const startOfDay = new Date(date);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(date);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    if (isNaN(startOfDay.getTime())) {
+      throw new BadRequestException('Date invalide');
+    }
+
+    const interviews = await this.prisma.interview.findMany({
+      where: {
+        interviewerId: Number(userId),
+        status: {
+          not: InterviewStatus.CANCELLED,
+        },
+        scheduledAt: {
+          gte: startOfDay,
+          lte: endOfDay,
+        },
+      },
+      include: {
+        application: {
+          include: {
+            candidate: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                phone: true,
+              },
+            },
+            job: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        scheduledAt: 'asc',
+      },
+    });
+
+    return interviews.map((interview) => {
+      const start = new Date(interview.scheduledAt);
+      const end = new Date(start);
+      end.setMinutes(end.getMinutes() + (interview.duration || 60));
+
+      return {
+        id: interview.id,
+        type: interview.type,
+        status: interview.status,
+        start,
+        end,
+        scheduledAt: interview.scheduledAt,
+        duration: interview.duration || 60,
+        location: interview.location,
+        candidate: interview.application?.candidate
+          ? `${interview.application.candidate.firstName} ${interview.application.candidate.lastName}`
+          : null,
+        candidateEmail: interview.application?.candidate?.email || null,
+        jobTitle: interview.application?.job?.title || null,
+      };
+    });
+  }
+
+  async evaluate(
+    id: number,
+    userId: number,
+    role: Role,
+    dto: EvaluateInterviewDto,
+  ) {
+    const interview = await this.prisma.interview.findUnique({
+      where: { id },
+      include: {
+        application: true,
+      },
+    });
+
+    if (!interview) {
+      throw new NotFoundException('Entretien introuvable');
+    }
+
+    if (interview.interviewerId !== Number(userId) && role !== Role.ADMIN) {
+      throw new ForbiddenException(
+        'Vous n’êtes pas autorisé à évaluer cet entretien',
+      );
+    }
+
+    const newStatus = dto.passed
+      ? InterviewStatus.PASSED
+      : InterviewStatus.FAILED;
+
+    const updatedInterview = await this.prisma.interview.update({
+      where: { id },
+      data: {
+        evaluation: dto.evaluation,
+        passed: dto.passed,
+        notes: dto.notes,
+        status: newStatus,
+        completedAt: new Date(),
+      },
+      include: {
+        application: {
+          include: {
+            candidate: true,
+            job: true,
+          },
+        },
+        interviewer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+
+    if (!dto.passed) {
+      await this.prisma.application.update({
+        where: { id: interview.applicationId },
+        data: {
+          status: ApplicationStatus.REJECTED,
+        },
+      });
+    }
+
+    return updatedInterview;
+  }
+
+  async cancel(id: number, userId: number) {
+    const interview = await this.prisma.interview.findUnique({
+      where: { id },
+    });
+
+    if (!interview) {
+      throw new NotFoundException('Entretien introuvable');
+    }
+
+    if (interview.interviewerId !== Number(userId)) {
+      throw new ForbiddenException(
+        'Vous n’êtes pas autorisé à annuler cet entretien',
+      );
+    }
+
+    return this.prisma.interview.update({
+      where: { id },
+      data: {
+        status: InterviewStatus.CANCELLED,
+      },
+      include: {
+        application: {
+          include: {
+            candidate: true,
+            job: true,
+          },
+        },
+        interviewer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+  }
+
+  async getMyInterviews(userId: number) {
+    return this.prisma.interview.findMany({
+      where: {
+        interviewerId: Number(userId),
+      },
+      include: {
+        application: {
+          include: {
+            candidate: true,
+            job: true,
+          },
+        },
+        interviewer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+      orderBy: {
+        scheduledAt: 'asc',
+      },
+    });
+  }
+
+  async getInterviewsByApplication(applicationId: number) {
+    return this.prisma.interview.findMany({
+      where: {
+        applicationId,
+      },
+      include: {
+        interviewer: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+      orderBy: {
+        scheduledAt: 'asc',
+      },
+    });
+  }
+
+  private async updateApplicationStatus(
+    applicationId: number,
+    interviewType: InterviewType,
+  ) {
+    let status: ApplicationStatus;
+
+    switch (interviewType) {
+      case InterviewType.HR_SCREENING:
+        status = ApplicationStatus.INTERVIEW_HR_SCREENING;
+        break;
+
+      case InterviewType.TECHNICAL:
+        status = ApplicationStatus.INTERVIEW_TECHNICAL;
+        break;
+
+      case InterviewType.HR_FINAL:
+        status = ApplicationStatus.INTERVIEW_HR_FINAL;
+        break;
+
+      default:
+        return;
+    }
+
+    await this.prisma.application.update({
+      where: { id: applicationId },
+      data: { status },
+    });
   }
 }
