@@ -26,12 +26,58 @@ import { Roles } from 'src/auth/roles.decorator';
 import { CurrentUser } from 'src/auth/current-user.decorator';
 import { Role, ApplicationStatus } from '@prisma/client';
 
-
-
 @Controller('applications')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ApplicationsController {
   constructor(private readonly applicationsService: ApplicationsService) {}
+
+  // ⭐ IMPORTANT: Routes spécifiques AVANT les routes paramétrées généralistes!
+
+  // ✅ Route spécifique HR Manager - DOIT ÊTRE AVANT :id
+  @Get('hr-manager/final-interviews-pending')
+  @Roles(Role.HR_MANAGER)
+  async getFinalInterviewsPending(@Req() req: Request & { user?: any }) {
+    const userId = req.user?.userId || req.user?.sub;
+    return this.applicationsService.getFinalInterviewsPending();
+  }
+
+// ✅ Valider un entretien technique
+@Patch('technical/:id/validate')
+@Roles(Role.RECRUITER)
+async validateTechnical(
+  @Param('id', ParseIntPipe) interviewId: number,
+  @Body() body: { notes?: string; rating?: number },
+  @Req() req: Request & { user?: any },
+) {
+  const userId = req.user?.userId || req.user?.sub;
+  return this.applicationsService.validateTechnicalInterview(interviewId, userId, body.notes);
+}
+
+// ❌ Rejeter après technique
+@Patch('technical/:id/reject')
+@Roles(Role.RECRUITER)
+async rejectTechnical(
+  @Param('id', ParseIntPipe) interviewId: number,
+  @Body() body: { notes?: string },
+  @Req() req: Request & { user?: any },
+) {
+  const userId = req.user?.userId || req.user?.sub;
+  return this.applicationsService.rejectTechnicalInterview(interviewId, userId, body.notes);
+}
+
+
+
+
+
+  // ✅ Voir mes candidatures (CANDIDATE)
+  @Get('my-applications')
+  @Roles(Role.CANDIDATE)
+  findMyApplications(@Req() request: Request & { user?: any }) {
+    const userId = request.user?.userId || request.user?.sub;
+    return this.applicationsService.findAllByCandidate(userId);
+  }
+
+  // ═══════════════════════════════════════════════════════════════
 
   // Postuler à une offre (CANDIDATE)
   @Post()
@@ -84,26 +130,18 @@ export class ApplicationsController {
     });
   }
 
-  // Voir mes candidatures (CANDIDATE)
-  @Get('my-applications')
-  @Roles(Role.CANDIDATE)
-  findMyApplications(@Req() request: Request & { user?: any }) {
-    const userId = request.user?.userId || request.user?.sub;
-    return this.applicationsService.findAllByCandidate(userId);
-  }
-
   // Voir les candidatures d'une offre (RECRUITER, HR_MANAGER, ADMIN)
- @Get('job/:jobId')
-@Roles(Role.RECRUITER, Role.HR_MANAGER, Role.ADMIN)
-findByJob(
-  @Param('jobId', ParseIntPipe) jobId: number,
-  @Req() request: Request & { user?: any },
-) {
-  const userId = request.user?.userId || request.user?.sub;
-  const role = request.user?.role;
+  @Get('job/:jobId')
+  @Roles(Role.RECRUITER, Role.HR_MANAGER, Role.ADMIN)
+  findByJob(
+    @Param('jobId', ParseIntPipe) jobId: number,
+    @Req() request: Request & { user?: any },
+  ) {
+    const userId = request.user?.userId || request.user?.sub;
+    const role = request.user?.role;
 
-  return this.applicationsService.findAllByJob(jobId, userId, role);
-}
+    return this.applicationsService.findAllByJob(jobId, userId, role);
+  }
 
   // Voir une candidature spécifique
   @Get(':id')
@@ -163,21 +201,4 @@ findByJob(
     const role = request.user?.role;
     return this.applicationsService.delete(id, userId, role);
   }
-
-
-
-  @Get(':id')
-async getApplicationById(@Param('id', ParseIntPipe) id: number) {
-  return this.applicationsService.getApplicationById(id);
-}
-
-
-
-@Get('hr-manager/final-interviews-pending')
-@Roles(Role.HR_MANAGER)
-async getFinalInterviewsPending(@Req() req: Request & { user?: any }) {
-  const userId = req.user?.userId || req.user?.sub;
-  return this.applicationsService.getFinalInterviewsPending(userId);
-}
-
 }

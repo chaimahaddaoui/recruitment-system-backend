@@ -3,6 +3,9 @@ import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class EmailService {
+  sendEmailValidatedTechnical(email: string, arg1: string, title: string) {
+    throw new Error('Method not implemented.');
+  }
   private transporter;
   configService: any;
 

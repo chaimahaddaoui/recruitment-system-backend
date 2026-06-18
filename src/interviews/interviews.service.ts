@@ -812,7 +812,29 @@ export class InterviewsService {
     });
   }
 
+
   private getNextStatusAfterInterview(
+  interviewType: InterviewType,
+): ApplicationStatus {
+  switch (interviewType) {
+    // ✅ Après validation RH initiale → passe à entretien technique
+    case InterviewType.HR_SCREENING:
+        return ApplicationStatus.INTERVIEW_HR_SCREENING;
+
+    // ✅ Après validation technique → passe à entretien RH final
+    case InterviewType.TECHNICAL:
+      return ApplicationStatus.INTERVIEW_HR_FINAL;
+
+    // ✅ Après validation RH finale → accepté
+    case InterviewType.HR_FINAL:
+      return ApplicationStatus.ACCEPTED;
+
+    default:
+      return ApplicationStatus.SUBMITTED;
+  }
+}
+
+ /*  private getNextStatusAfterInterview(
     interviewType: InterviewType,
   ): ApplicationStatus {
     switch (interviewType) {
@@ -828,5 +850,26 @@ export class InterviewsService {
       default:
         return ApplicationStatus.SUBMITTED;
     }
+  } */
+ /* private getNextStatusAfterInterview(
+  interviewType: InterviewType,
+): ApplicationStatus {
+  switch (interviewType) {
+
+    // Après validation RH initiale
+    case InterviewType.HR_SCREENING:
+      return ApplicationStatus.INTERVIEW_TECHNICAL;
+
+    // Après validation technique
+    case InterviewType.TECHNICAL:
+      return ApplicationStatus.INTERVIEW_HR_FINAL;
+
+    // Après validation RH finale
+    case InterviewType.HR_FINAL:
+      return ApplicationStatus.ACCEPTED;
+
+    default:
+      return ApplicationStatus.SUBMITTED;
   }
+} */
 }

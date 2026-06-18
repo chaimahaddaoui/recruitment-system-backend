@@ -1,315 +1,4 @@
-/* 
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
-import { EmailService } from '../email/email.service'; 
-import { CreateApplicationDto } from './dto/create-application.dto';
-import { ApplicationStatus } from '@prisma/client';
 
-
-@Injectable()
-export class ApplicationsService {
-  constructor(
-    private prisma: PrismaService,
-    private emailService: EmailService, 
-  ) {}
-
-  async create(candidateId: number, createApplicationDto: any) {
-    console.log('📝 Service - candidateId:', candidateId);
-    console.log('📝 Service - DTO:', createApplicationDto);
-
-    if (!candidateId) {
-      throw new BadRequestException('Utilisateur non authentifié');
-    }
-
-    const job = await this.prisma.job.findUnique({
-      where: { id: createApplicationDto.jobId },
-    });
-
-    if (!job) {
-      throw new NotFoundException('Offre d\'emploi introuvable');
-    }
-
-    if (job.status !== 'OPEN') {
-      throw new BadRequestException('Cette offre n\'est plus ouverte aux candidatures');
-    }
-
-    const existingApplication = await this.prisma.application.findFirst({
-      where: {
-        jobId: createApplicationDto.jobId,
-        candidateId: candidateId,
-      },
-    });
-
-    if (existingApplication) {
-      throw new BadRequestException('Vous avez déjà postulé à cette offre');
-    }
-
-    const application = await this.prisma.application.create({
-      data: {
-        jobId: createApplicationDto.jobId,
-        candidateId: candidateId,
-        coverLetter: createApplicationDto.coverLetter,
-        cvPath: createApplicationDto.cvPath,
-        status: ApplicationStatus.SUBMITTED,
-      },
-      include: {
-        job: {
-          select: {
-            id: true,
-            title: true,
-            location: true,
-            contractType: true,
-          },
-        },
-        candidate: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-      },
-    });
-
-    // ✅ EMAIL CONFIRMATION
-    await this.emailService.sendApplicationConfirmation(
-      application.candidate.email,
-      `${application.candidate.firstName} ${application.candidate.lastName}`,
-      application.job.title,
-    );
-
-    return application;
-  }
-
-  async findAllByCandidate(candidateId: number) {
-    return this.prisma.application.findMany({
-      where: { candidateId },
-      include: {
-        job: {
-          select: {
-            id: true,
-            title: true,
-            location: true,
-            contractType: true,
-            salaryMin: true,
-            salaryMax: true,
-            createdBy: {
-              select: {
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-  }
-
-  async findAllByJob(jobId: number, userId: number, role: string) {
-    let job;
-
-    if (role === 'RECRUITER') {
-      job = await this.prisma.job.findFirst({
-        where: {
-          id: jobId,
-          createdById: userId,
-        },
-      });
-    } else {
-      job = await this.prisma.job.findUnique({
-        where: { id: jobId },
-      });
-    }
-
-    if (!job) {
-      throw new NotFoundException('Offre introuvable ou non autorisée');
-    }
-
-    return this.prisma.application.findMany({
-      where: { jobId },
-      include: {
-        candidate: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-  }
-
-  async findOne(id: number, userId: number, userRole: string) {
-    const application = await this.prisma.application.findUnique({
-      where: { id },
-      include: {
-        job: {
-          include: {
-            createdBy: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-              },
-            },
-          },
-        },
-        candidate: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-          },
-        },
-      },
-    });
-
-    if (!application) {
-      throw new NotFoundException('Candidature introuvable');
-    }
-
-    if (userRole === 'CANDIDATE' && application.candidateId !== userId) {
-      throw new BadRequestException('Non autorisé');
-    }
-
-    if (userRole === 'RECRUITER' && application.job.createdById !== userId) {
-      throw new BadRequestException('Non autorisé');
-    }
-
-    return application;
-  }
-
-  // ✅ SHORTLIST + EMAIL
-  async shortlist(id: number, recruiterId: number) {
-    const application = await this.prisma.application.findUnique({
-      where: { id },
-      include: {
-        job: true,
-        candidate: true, // ✅ IMPORTANT
-      },
-    });
-
-    if (!application) {
-      throw new NotFoundException('Candidature introuvable');
-    }
-
-    if (application.job.createdById !== recruiterId) {
-      throw new ForbiddenException('Accès refusé');
-    }
-
-    if (application.status !== ApplicationStatus.SUBMITTED) {
-      throw new BadRequestException('Statut invalide');
-    }
-
-    const updated = await this.prisma.application.update({
-      where: { id },
-      data: { status: ApplicationStatus.SHORTLISTED },
-      include: {
-        job: true,
-        candidate: true,
-      },
-    });
-
-    // ✅ EMAIL SHORTLIST
-    await this.emailService.sendShortlistNotification(
-      updated.candidate.email,
-      `${updated.candidate.firstName} ${updated.candidate.lastName}`,
-      updated.job.title,
-    );
-
-    return updated;
-  }
-
-  // ✅ REJECT + EMAIL
-  async reject(id: number, userId: number, role: string) {
-    const application = await this.prisma.application.findUnique({
-      where: { id },
-      include: {
-        job: true,
-        candidate: true, 
-      },
-    });
-
-    if (!application) {
-      throw new NotFoundException('Candidature introuvable');
-    }
-
-    if (role === 'RECRUITER' && application.job.createdById !== userId) {
-      throw new ForbiddenException('Accès refusé');
-    }
-
-    const updated = await this.prisma.application.update({
-      where: { id },
-      data: { status: ApplicationStatus.REJECTED },
-      include: {
-        job: true,
-        candidate: true,
-      },
-    });
-
-    // ✅ EMAIL REJET
-    await this.emailService.sendRejection(
-      updated.candidate.email,
-      `${updated.candidate.firstName} ${updated.candidate.lastName}`,
-      updated.job.title,
-    );
-
-    return updated;
-  }
-
-  async updateStatus(id: number, status: ApplicationStatus, userId: number, role: string) {
-    const application = await this.prisma.application.findUnique({
-      where: { id },
-      include: { job: true },
-    });
-
-    if (!application) {
-      throw new NotFoundException('Candidature introuvable');
-    }
-
-    if (role === 'RECRUITER' && application.job.createdById !== userId) {
-      throw new ForbiddenException('Accès refusé');
-    }
-
-    return this.prisma.application.update({
-      where: { id },
-      data: { status },
-    });
-  }
-
-  async delete(id: number, userId: number, role: string) {
-    const application = await this.prisma.application.findUnique({
-      where: { id },
-      include: { job: true },
-    });
-
-    if (!application) {
-      throw new NotFoundException('Candidature introuvable');
-    }
-
-    if (role === 'RECRUITER' && application.job.createdById !== userId) {
-      throw new ForbiddenException('Accès refusé');
-    }
-
-    return this.prisma.application.delete({
-      where: { id },
-    });
-  }
-} */
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
@@ -756,6 +445,60 @@ ${job.contractType || 'Non spécifié'}
   }
 
 
+
+async getFinalInterviewsPending() {
+  const applications = await this.prisma.application.findMany({
+    where: {
+      status: ApplicationStatus.INTERVIEW_HR_FINAL,
+    },
+    include: {
+      candidate: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          phone: true,
+        },
+      },
+      job: {
+        select: {
+          id: true,
+          title: true,
+          location: true,
+          salaryMin: true,
+          salaryMax: true,
+          createdBy: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
+        },
+      },
+      interviews: {
+        where: {
+          type: 'HR_FINAL',
+        },
+      },
+    },
+    orderBy: {
+      updatedAt: 'desc',
+    },
+  });
+ 
+  return {
+    count: applications.length,
+    applications: applications,
+  };
+}
+
+
+
+
+
+
   async getApplicationById(id: number) {
   return this.prisma.application.findUnique({
     where: { id },
@@ -788,4 +531,81 @@ ${job.contractType || 'Non spécifié'}
       where: { id },
     });
   }
+
+async validateTechnicalInterview(
+  interviewId: number,
+  recruiterId: number,
+  notes?: string,
+  
+) {
+  const interview = await this.prisma.interview.findUnique({
+    where: { id: interviewId },
+    include: { application: { include: { job: true, candidate: true } } },
+  });
+
+  if (!interview) throw new NotFoundException('Entretien introuvable');
+  if (interview.application.job.createdById !== recruiterId) {
+    throw new ForbiddenException('Non autorisé');
+  }
+
+  // ✅ Marque entretien comme complété
+  await this.prisma.interview.update({
+    where: { id: interviewId },
+    data: { status: 'COMPLETED', notes,  completedAt: new Date() },
+  });
+
+  // ✅ Passe candidat à HR_FINAL
+  const updated = await this.prisma.application.update({
+    where: { id: interview.applicationId },
+    data: { status: ApplicationStatus.INTERVIEW_HR_FINAL },
+    include: { candidate: true, job: true },
+  });
+
+  // ✅ Email au candidat
+  await this.emailService.sendEmailValidatedTechnical(
+    updated.candidate.email,
+    `${updated.candidate.firstName} ${updated.candidate.lastName}`,
+    updated.job.title,
+  );
+
+  return updated;
+}
+
+async rejectTechnicalInterview(
+  interviewId: number,
+  recruiterId: number,
+  notes?: string,
+) {
+  const interview = await this.prisma.interview.findUnique({
+    where: { id: interviewId },
+    include: { application: { include: { job: true, candidate: true } } },
+  });
+
+  if (!interview) throw new NotFoundException('Entretien introuvable');
+  if (interview.application.job.createdById !== recruiterId) {
+    throw new ForbiddenException('Non autorisé');
+  }
+
+  await this.prisma.interview.update({
+    where: { id: interviewId },
+    data: { status: 'REJECTED' as any, notes, completedAt: new Date() },
+  });
+
+  const updated = await this.prisma.application.update({
+    where: { id: interview.applicationId },
+    data: { status: ApplicationStatus.REJECTED },
+    include: { candidate: true, job: true },
+  });
+
+  await this.emailService.sendRejection(
+    updated.candidate.email,
+    `${updated.candidate.firstName} ${updated.candidate.lastName}`,
+    updated.job.title,
+  );
+
+  return updated;
+}
+
+
+
 }
