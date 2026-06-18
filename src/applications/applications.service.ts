@@ -320,6 +320,7 @@ import * as fs from 'fs';
 
 @Injectable()
 export class ApplicationsService {
+  [x: string]: any;
   private readonly logger = new Logger(ApplicationsService.name);
 
   constructor(
@@ -753,6 +754,21 @@ ${job.contractType || 'Non spécifié'}
       data: { status },
     });
   }
+
+
+  async getApplicationById(id: number) {
+  return this.prisma.application.findUnique({
+    where: { id },
+    include: {
+      candidate: true,
+      job: true,
+    },
+  });
+}
+
+
+
+
 
   async delete(id: number, userId: number, role: string) {
     const application = await this.prisma.application.findUnique({

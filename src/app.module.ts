@@ -13,7 +13,7 @@ import { ApplicationsModule } from './applications/applications.module';
 import { InterviewsModule } from './interviews/interviews.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { DjangoAiModule } from './django-ai/django-ai.module';
-
+import { GoogleMeetModule } from './google-meet/google-meet.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -30,6 +30,8 @@ import { DjangoAiModule } from './django-ai/django-ai.module';
     InterviewsModule,
     UploadsModule,
     DjangoAiModule,
+    GoogleMeetModule,
+
   ],
 })
 export class AppModule {}

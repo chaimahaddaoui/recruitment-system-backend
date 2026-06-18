@@ -12,6 +12,7 @@ import {
   ParseIntPipe,
   BadRequestException,
   Req,
+  Request,
   UnauthorizedException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -162,4 +163,21 @@ findByJob(
     const role = request.user?.role;
     return this.applicationsService.delete(id, userId, role);
   }
+
+
+
+  @Get(':id')
+async getApplicationById(@Param('id', ParseIntPipe) id: number) {
+  return this.applicationsService.getApplicationById(id);
+}
+
+
+
+@Get('hr-manager/final-interviews-pending')
+@Roles(Role.HR_MANAGER)
+async getFinalInterviewsPending(@Req() req: Request & { user?: any }) {
+  const userId = req.user?.userId || req.user?.sub;
+  return this.applicationsService.getFinalInterviewsPending(userId);
+}
+
 }

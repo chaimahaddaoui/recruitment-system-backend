@@ -323,9 +323,7 @@ export class InterviewsService {
         throw new BadRequestException('Type d\'entretien invalide');
     }
   }
-} */
-
-  import {
+} */import {
   BadRequestException,
   ForbiddenException,
   Injectable,
@@ -333,19 +331,33 @@ export class InterviewsService {
 } from '@nestjs/common';
 import {
   ApplicationStatus,
+  InterviewMode,
   InterviewStatus,
   InterviewType,
   Role,
 } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { EmailService } from 'src/email/email.service';
+import { GoogleMeetService } from 'src/google-meet/google-meet.service';
 import { CreateInterviewDto } from './dto/create-interview.dto';
 import { EvaluateInterviewDto } from './dto/evaluate-interview.dto';
 
 @Injectable()
 export class InterviewsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailService: EmailService,
+    private readonly googleMeetService: GoogleMeetService,
+  ) {}
 
   async create(userId: number, role: Role, dto: CreateInterviewDto) {
+    console.log('📌 [CREATE INTERVIEW] Données reçues:', {
+      applicationId: dto.applicationId,
+      type: dto.type,
+      meetingMode: dto.meetingMode,
+      location: dto.location,
+    });
+
     const application = await this.prisma.application.findUnique({
       where: { id: dto.applicationId },
       include: {
@@ -358,25 +370,27 @@ export class InterviewsService {
       throw new NotFoundException('Candidature introuvable');
     }
 
+    // 🆕 RÉCUPÈRE LE RECRUTEUR CONNECTÉ
+    const recruiter = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!recruiter) {
+      throw new NotFoundException('Recruteur introuvable');
+    }
+
+    console.log('👤 Recruteur:', recruiter.email);
+
     const scheduledAt = new Date(dto.scheduledAt);
     const duration = dto.duration || 60;
 
     if (isNaN(scheduledAt.getTime())) {
-      throw new BadRequestException('Date d’entretien invalide');
-    }
-
-    if (duration <= 0) {
-      throw new BadRequestException('La durée doit être supérieure à 0');
+      throw new BadRequestException("Date d'entretien invalide");
     }
 
     const newInterviewEnd = new Date(scheduledAt);
     newInterviewEnd.setMinutes(newInterviewEnd.getMinutes() + duration);
 
-    /**
-     * Vérification des conflits :
-     * Un conflit existe si :
-     * nouvelDébut < ancienFin ET nouvelFin > ancienDébut
-     */
     const sameDayStart = new Date(scheduledAt);
     sameDayStart.setHours(0, 0, 0, 0);
 
@@ -412,16 +426,54 @@ export class InterviewsService {
       );
     }
 
+    let finalLocation = dto.location?.trim() || 'Non spécifié';
+    let interviewMode: InterviewMode = InterviewMode.LOCAL;
+    let googleMeetLink: string | null = null;
+    let googleMeetId: string | null = null;
+    let googleCalendarEventId: string | null = null;
+
+    // 🆕 SI GOOGLE MEET, CRÉE LE LIEN
+    if (dto.meetingMode === 'GOOGLE_MEET') {
+      try {
+        console.log('🎥 [GOOGLE MEET] Création du lien...');
+
+        const meetResult = await this.googleMeetService.createMeetingLink({
+          title: `Entretien - ${application.job.title}`,
+          candidateName: `${application.candidate.firstName} ${application.candidate.lastName}`,
+          candidateEmail: application.candidate.email,
+          recruiterEmail: recruiter.email, // 🆕 UTILISE L'EMAIL DU RECRUTEUR CONNECTÉ
+          scheduledDate: scheduledAt,
+          duration,
+        });
+
+        googleMeetLink = meetResult.meetLink;
+        googleMeetId = meetResult.meetId;
+        googleCalendarEventId = meetResult.eventId;
+        finalLocation = googleMeetLink;
+        interviewMode = InterviewMode.GOOGLE_MEET;
+
+        console.log('✅ [GOOGLE MEET] Lien créé:', googleMeetLink);
+      } catch (error: any) {
+        console.error('❌ [GOOGLE MEET] Erreur:', error.message);
+        throw error;
+      }
+    }
+
+    // 🆕 CRÉE L'ENTRETIEN AVEC TOUS LES CHAMPS
     const interview = await this.prisma.interview.create({
       data: {
         applicationId: dto.applicationId,
         type: dto.type as InterviewType,
         scheduledAt,
         duration,
-        location: dto.location,
+        location: finalLocation,
         notes: dto.notes,
         interviewerId: Number(userId),
         status: InterviewStatus.SCHEDULED,
+        interviewMode,
+        googleMeetLink,
+        googleMeetId,
+        googleCalendarEventId,
       },
       include: {
         application: {
@@ -442,9 +494,39 @@ export class InterviewsService {
       },
     });
 
-    await this.updateApplicationStatus(dto.applicationId, dto.type as InterviewType);
+    console.log('✅ [DB] Entretien créé ID:', interview.id);
+    console.log('💾 Données sauvegardées:', {
+      googleMeetLink: interview.googleMeetLink,
+      location: interview.location,
+      interviewMode: interview.interviewMode,
+    });
 
-    return interview;
+    await this.updateApplicationStatus(
+      dto.applicationId,
+      dto.type as InterviewType,
+    );
+
+    // 🆕 ENVOIE L'EMAIL AVEC LE LIEN GOOGLE MEET
+    const emailLocation = interview.googleMeetLink || interview.location || finalLocation;
+    
+    console.log('📧 [EMAIL] Envoi avec location:', emailLocation);
+
+    await this.emailService.sendInterviewScheduled(
+      interview.application.candidate.email,
+      `${interview.application.candidate.firstName} ${interview.application.candidate.lastName}`,
+      interview.application.job.title,
+      interview.type,
+      interview.scheduledAt,
+      emailLocation, // 🆕 PASSE LE LIEN CORRECT
+      interview.duration || 60,
+    );
+
+    console.log('✅ Email envoyé avec succès');
+
+    return {
+      ...interview,
+      meetingLink: googleMeetLink,
+    };
   }
 
   async getAvailability(userId: number, date: string) {
@@ -476,21 +558,8 @@ export class InterviewsService {
       include: {
         application: {
           include: {
-            candidate: {
-              select: {
-                id: true,
-                firstName: true,
-                lastName: true,
-                email: true,
-                phone: true,
-              },
-            },
-            job: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
+            candidate: true,
+            job: true,
           },
         },
       },
@@ -512,7 +581,7 @@ export class InterviewsService {
         end,
         scheduledAt: interview.scheduledAt,
         duration: interview.duration || 60,
-        location: interview.location,
+        location: interview.googleMeetLink || interview.location,
         candidate: interview.application?.candidate
           ? `${interview.application.candidate.firstName} ${interview.application.candidate.lastName}`
           : null,
@@ -531,7 +600,12 @@ export class InterviewsService {
     const interview = await this.prisma.interview.findUnique({
       where: { id },
       include: {
-        application: true,
+        application: {
+          include: {
+            candidate: true,
+            job: true,
+          },
+        },
       },
     });
 
@@ -541,7 +615,7 @@ export class InterviewsService {
 
     if (interview.interviewerId !== Number(userId) && role !== Role.ADMIN) {
       throw new ForbiddenException(
-        'Vous n’êtes pas autorisé à évaluer cet entretien',
+        "Vous n'êtes pas autorisé à évaluer cet entretien",
       );
     }
 
@@ -584,6 +658,45 @@ export class InterviewsService {
           status: ApplicationStatus.REJECTED,
         },
       });
+
+      await this.emailService.sendRejection(
+        interview.application.candidate.email,
+        `${interview.application.candidate.firstName} ${interview.application.candidate.lastName}`,
+        interview.application.job.title,
+      );
+
+      return updatedInterview;
+    }
+
+    const nextStatus = this.getNextStatusAfterInterview(interview.type);
+
+    await this.prisma.application.update({
+      where: { id: interview.applicationId },
+      data: {
+        status: nextStatus,
+      },
+    });
+
+    if (interview.type === InterviewType.HR_FINAL) {
+      await this.emailService.sendOfferAccepted(
+        interview.application.candidate.email,
+        `${interview.application.candidate.firstName} ${interview.application.candidate.lastName}`,
+        interview.application.job.title,
+      );
+    } else {
+      const nextSteps: Record<string, string> = {
+        HR_SCREENING: 'Vous passerez prochainement un entretien technique',
+        TECHNICAL: 'Vous passerez prochainement un entretien RH final',
+        HR_FINAL: "Vous recevrez une offre d'emploi formelle",
+      };
+
+      await this.emailService.sendInterviewPassed(
+        interview.application.candidate.email,
+        `${interview.application.candidate.firstName} ${interview.application.candidate.lastName}`,
+        interview.application.job.title,
+        interview.type,
+        nextSteps[interview.type],
+      );
     }
 
     return updatedInterview;
@@ -600,8 +713,18 @@ export class InterviewsService {
 
     if (interview.interviewerId !== Number(userId)) {
       throw new ForbiddenException(
-        'Vous n’êtes pas autorisé à annuler cet entretien',
+        "Vous n'êtes pas autorisé à annuler cet entretien",
       );
+    }
+
+    // 🆕 SI GOOGLE MEET, SUPPRIME L'ÉVÉNEMENT
+    if (interview.googleCalendarEventId) {
+      try {
+        await this.googleMeetService.deleteMeeting(interview.googleCalendarEventId);
+        console.log('✅ Événement Google Meet supprimé');
+      } catch (error: any) {
+        console.error('⚠️ Erreur suppression Google Meet:', error.message);
+      }
     }
 
     return this.prisma.interview.update({
@@ -641,15 +764,7 @@ export class InterviewsService {
             job: true,
           },
         },
-        interviewer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            role: true,
-          },
-        },
+        interviewer: true,
       },
       orderBy: {
         scheduledAt: 'asc',
@@ -663,15 +778,7 @@ export class InterviewsService {
         applicationId,
       },
       include: {
-        interviewer: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            role: true,
-          },
-        },
+        interviewer: true,
       },
       orderBy: {
         scheduledAt: 'asc',
@@ -689,15 +796,12 @@ export class InterviewsService {
       case InterviewType.HR_SCREENING:
         status = ApplicationStatus.INTERVIEW_HR_SCREENING;
         break;
-
       case InterviewType.TECHNICAL:
         status = ApplicationStatus.INTERVIEW_TECHNICAL;
         break;
-
       case InterviewType.HR_FINAL:
         status = ApplicationStatus.INTERVIEW_HR_FINAL;
         break;
-
       default:
         return;
     }
@@ -706,5 +810,23 @@ export class InterviewsService {
       where: { id: applicationId },
       data: { status },
     });
+  }
+
+  private getNextStatusAfterInterview(
+    interviewType: InterviewType,
+  ): ApplicationStatus {
+    switch (interviewType) {
+      case InterviewType.HR_SCREENING:
+        return ApplicationStatus.INTERVIEW_HR_SCREENING;
+
+      case InterviewType.TECHNICAL:
+        return ApplicationStatus.INTERVIEW_TECHNICAL;
+
+      case InterviewType.HR_FINAL:
+        return ApplicationStatus.ACCEPTED;
+
+      default:
+        return ApplicationStatus.SUBMITTED;
+    }
   }
 }

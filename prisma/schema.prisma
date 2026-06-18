@@ -151,8 +151,21 @@ model Interview {
   interviewerId Int
   interviewer   User @relation("UserInterviews", fields: [interviewerId], references: [id])
 
+
+//  CES CHAMPS POUR GOOGLE MEET
+  interviewMode      InterviewMode  @default(LOCAL)     // LOCAL ou GOOGLE_MEET
+  googleMeetLink     String?        @map("google_meet_link")  // https://meet.google.com/xyz
+  googleMeetId       String?        @map("google_meet_id")    // xyz-abc-def
+  googleCalendarEventId String?     @map("google_calendar_event_id") // ID événement Google
+
+
   createdAt DateTime @default(now())
    updatedAt DateTime @updatedAt
+   @@map("interviews")
+}
+enum InterviewMode {
+  LOCAL
+  GOOGLE_MEET
 }
 
 enum InterviewType {
