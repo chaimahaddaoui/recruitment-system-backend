@@ -1,9 +1,3 @@
-
-@'
-// ════════════════════════════════════════════════════
-// JENKINS PIPELINE - RECRUITMENT SYSTEM
-// ════════════════════════════════════════════════════
-
 pipeline {
   agent any
 
@@ -21,29 +15,23 @@ pipeline {
     stage('Checkout') {
       steps {
         script {
-          echo '════════════════════════════════════════'
           echo '🔄 STAGE 1: Checkout du code'
-          echo '════════════════════════════════════════'
         }
         checkout scm
         script {
-          echo '✅ Code récupéré avec succès'
+          echo '✅ Code récupéré'
         }
       }
     }
 
-    stage('Install Dependencies') {
+    stage('Install') {
       steps {
         script {
-          echo '════════════════════════════════════════'
           echo '📦 STAGE 2: Installation des dépendances'
-          echo '════════════════════════════════════════'
         }
-        sh '''
-          node --version
-          npm --version
-          npm install
-        '''
+        sh 'node --version'
+        sh 'npm --version'
+        sh 'npm install'
         script {
           echo '✅ Dépendances installées'
         }
@@ -53,13 +41,9 @@ pipeline {
     stage('Unit Tests') {
       steps {
         script {
-          echo '════════════════════════════════════════'
           echo '🧪 STAGE 3: Tests unitaires'
-          echo '════════════════════════════════════════'
         }
-        sh '''
-          npm test -- --testPathPattern="spec.ts$" --passWithNoTests
-        '''
+        sh 'npm test -- --testPathPattern="spec.ts$" --passWithNoTests'
         script {
           echo '✅ Tests unitaires réussis'
         }
@@ -69,13 +53,9 @@ pipeline {
     stage('Integration Tests') {
       steps {
         script {
-          echo '════════════════════════════════════════'
           echo '🔗 STAGE 4: Tests d\'intégration'
-          echo '════════════════════════════════════════'
         }
-        sh '''
-          npm test -- --testPathPattern="integration" --passWithNoTests
-        '''
+        sh 'npm test -- --testPathPattern="integration" --passWithNoTests'
         script {
           echo '✅ Tests d\'intégration réussis'
         }
@@ -85,35 +65,26 @@ pipeline {
     stage('Build') {
       steps {
         script {
-          echo '════════════════════════════════════════'
           echo '🔨 STAGE 5: Build du projet'
-          echo '════════════════════════════════════════'
         }
-        sh '''
-          npm run build
-        '''
+        sh 'npm run build'
         script {
           echo '✅ Build réussi'
         }
       }
     }
 
-    stage('Archive Artifacts') {
+    stage('Archive') {
       steps {
         script {
-          echo '════════════════════════════════════════'
-          echo '📦 STAGE 6: Archivage des artefacts'
-          echo '════════════════════════════════════════'
+          echo '📦 STAGE 6: Archivage'
         }
-        sh '''
-          tar -czf build.tar.gz dist/ || true
-        '''
         archiveArtifacts(
-          artifacts: 'build.tar.gz,dist/**/*',
+          artifacts: 'dist/**/*',
           allowEmptyArchive: true
         )
         script {
-          echo '✅ Artefacts archivés'
+          echo '✅ Artifacts archivés'
         }
       }
     }
@@ -122,11 +93,7 @@ pipeline {
   post {
     always {
       script {
-        echo '════════════════════════════════════════'
-        echo '📊 RÉSUMÉ DU PIPELINE'
-        echo '════════════════════════════════════════'
-        echo "Build Status: ${currentBuild.result}"
-        echo "Build Number: ${BUILD_NUMBER}"
+        echo '📊 Pipeline terminé'
       }
       cleanWs()
     }
@@ -134,16 +101,13 @@ pipeline {
     success {
       script {
         echo '🎉 PIPELINE RÉUSSI!'
-        echo '✅ Tous les tests passent'
-        echo '✅ Build réussi'
       }
     }
     
     failure {
       script {
-        echo '❌ PIPELINE ÉCHOUÉ!'
+        echo '❌ PIPELINE ÉCHOUÉ'
       }
     }
   }
 }
-'@ | Out-File -Encoding UTF8 Jenkinsfile
