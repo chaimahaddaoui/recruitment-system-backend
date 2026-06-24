@@ -1,10 +1,6 @@
 pipeline {
   agent any
 
-  tools {
-    nodejs 'NodeJS'
-  }
-
   options {
     buildDiscarder(logRotator(numToKeepStr: '10'))
     timeout(time: 30, unit: 'MINUTES')
@@ -33,9 +29,9 @@ pipeline {
         script {
           echo 'STAGE 2: Installation des dependances'
         }
-        sh 'node --version'
-        sh 'npm --version'
-        sh 'npm install'
+        sh '''
+          npm install
+        '''
         script {
           echo 'OK: Dependances installees'
         }
@@ -47,7 +43,9 @@ pipeline {
         script {
           echo 'STAGE 3: Tests unitaires'
         }
-        sh 'npm test -- --testPathPattern="spec.ts$" --passWithNoTests'
+        sh '''
+          npm test -- --testPathPattern="spec.ts$" --passWithNoTests
+        '''
         script {
           echo 'OK: Tests unitaires reussis'
         }
@@ -59,7 +57,9 @@ pipeline {
         script {
           echo 'STAGE 4: Tests d\'integration'
         }
-        sh 'npm test -- --testPathPattern="integration" --passWithNoTests'
+        sh '''
+          npm test -- --testPathPattern="integration" --passWithNoTests
+        '''
         script {
           echo 'OK: Tests d\'integration reussis'
         }
@@ -71,7 +71,9 @@ pipeline {
         script {
           echo 'STAGE 5: Build du projet'
         }
-        sh 'npm run build'
+        sh '''
+          npm run build
+        '''
         script {
           echo 'OK: Build reussi'
         }
