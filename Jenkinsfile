@@ -15,11 +15,11 @@ pipeline {
     stage('Checkout') {
       steps {
         script {
-          echo '🔄 STAGE 1: Checkout du code'
+          echo 'STAGE 1: Checkout du code'
         }
         checkout scm
         script {
-          echo '✅ Code récupéré'
+          echo 'OK: Code recupere'
         }
       }
     }
@@ -27,13 +27,13 @@ pipeline {
     stage('Install') {
       steps {
         script {
-          echo '📦 STAGE 2: Installation des dépendances'
+          echo 'STAGE 2: Installation des dependances'
         }
         sh 'node --version'
         sh 'npm --version'
         sh 'npm install'
         script {
-          echo '✅ Dépendances installées'
+          echo 'OK: Dependances installees'
         }
       }
     }
@@ -41,11 +41,11 @@ pipeline {
     stage('Unit Tests') {
       steps {
         script {
-          echo '🧪 STAGE 3: Tests unitaires'
+          echo 'STAGE 3: Tests unitaires'
         }
         sh 'npm test -- --testPathPattern="spec.ts$" --passWithNoTests'
         script {
-          echo '✅ Tests unitaires réussis'
+          echo 'OK: Tests unitaires reussis'
         }
       }
     }
@@ -53,11 +53,11 @@ pipeline {
     stage('Integration Tests') {
       steps {
         script {
-          echo '🔗 STAGE 4: Tests d\'intégration'
+          echo 'STAGE 4: Tests d\'integration'
         }
         sh 'npm test -- --testPathPattern="integration" --passWithNoTests'
         script {
-          echo '✅ Tests d\'intégration réussis'
+          echo 'OK: Tests d\'integration reussis'
         }
       }
     }
@@ -65,11 +65,11 @@ pipeline {
     stage('Build') {
       steps {
         script {
-          echo '🔨 STAGE 5: Build du projet'
+          echo 'STAGE 5: Build du projet'
         }
         sh 'npm run build'
         script {
-          echo '✅ Build réussi'
+          echo 'OK: Build reussi'
         }
       }
     }
@@ -77,14 +77,14 @@ pipeline {
     stage('Archive') {
       steps {
         script {
-          echo '📦 STAGE 6: Archivage'
+          echo 'STAGE 6: Archivage'
         }
         archiveArtifacts(
           artifacts: 'dist/**/*',
           allowEmptyArchive: true
         )
         script {
-          echo '✅ Artifacts archivés'
+          echo 'OK: Artifacts archives'
         }
       }
     }
@@ -93,20 +93,20 @@ pipeline {
   post {
     always {
       script {
-        echo '📊 Pipeline terminé'
+        echo 'Pipeline termine'
       }
       cleanWs()
     }
     
     success {
       script {
-        echo '🎉 PIPELINE RÉUSSI!'
+        echo 'SUCCESS: Pipeline reussi!'
       }
     }
     
     failure {
       script {
-        echo '❌ PIPELINE ÉCHOUÉ'
+        echo 'FAILURE: Pipeline echoue'
       }
     }
   }
