@@ -14,9 +14,13 @@ import { InterviewsModule } from './interviews/interviews.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { DjangoAiModule } from './django-ai/django-ai.module';
 import { GoogleMeetModule } from './google-meet/google-meet.module';
+import { PrometheusModule } from './prometheus/prometheus.module';
+import { BusinessMetricsService } from './monitoring/business-metrics/business-metrics.service';
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    PrometheusModule,
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -33,5 +37,6 @@ import { GoogleMeetModule } from './google-meet/google-meet.module';
     GoogleMeetModule,
 
   ],
+  providers: [BusinessMetricsService],
 })
 export class AppModule {}

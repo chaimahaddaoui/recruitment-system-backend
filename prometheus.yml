@@ -1,0 +1,56 @@
+# Prometheus Configuration File
+# Ce fichier dit à Prometheus où trouver les métriques
+
+global:
+  # Intervalle pour scraper les métriques (15 secondes)
+  scrape_interval: 15s
+  
+  # Intervalle pour évaluer les règles d'alerte
+  evaluation_interval: 15s
+  
+  # Timeout pour les requêtes de scrape
+  scrape_timeout: 10s
+
+# Configurations de scrape - où chercher les métriques
+scrape_configs:
+  # ════════════════════════════════════════════════════
+  # JOB 1: NestJS Backend (ton application)
+  # ════════════════════════════════════════════════════
+  - job_name: 'nestjs-backend'
+    
+    # Intervalle de scrape pour ce job (peut override le global)
+    scrape_interval: 15s
+    
+    # Endpoint pour scraper les métriques
+    metrics_path: '/metrics'
+    
+    # Configuration statique des targets
+    static_configs:
+      # Adresse du backend NestJS
+      # host.docker.internal = localhost (pour Docker)
+      - targets: ['host.docker.internal:3000']
+        labels:
+          service: 'nestjs-api'
+          environment: 'development'
+
+  # ════════════════════════════════════════════════════
+  # JOB 2: Prometheus lui-même (optionnel)
+  # ════════════════════════════════════════════════════
+  - job_name: 'prometheus'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          environment: 'monitoring'
+
+# ════════════════════════════════════════════════════
+# ALERTING RULES (Optionnel - pour plus tard)
+# ════════════════════════════════════════════════════
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: []
+
+# rule_files:
+#   - "alert_rules.yml"

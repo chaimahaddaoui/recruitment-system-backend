@@ -15,9 +15,9 @@ import { CreateInterviewDto } from './dto/create-interview.dto';
 import { EvaluateInterviewDto } from './dto/evaluate-interview.dto';
 import { Request } from 'express';
 import { Role } from '@prisma/client';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
-import { RolesGuard } from 'src/auth/roles.guard';
-import { Roles } from 'src/auth/roles.decorator';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('interviews')
 @UseGuards(JwtAuthGuard, RolesGuard)

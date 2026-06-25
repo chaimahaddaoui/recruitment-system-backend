@@ -6,6 +6,9 @@ import { JobStatus } from '@prisma/client';
 
 @Injectable()
 export class JobsService {
+  publish(arg0: number, arg1: number, arg2: string) {
+    throw new Error('Method not implemented.');
+  }
   constructor(private prisma: PrismaService) {}
 
   // Créer une offre (toujours en DRAFT)

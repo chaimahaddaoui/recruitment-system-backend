@@ -336,9 +336,9 @@ import {
   InterviewType,
   Role,
 } from '@prisma/client';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { EmailService } from 'src/email/email.service';
-import { GoogleMeetService } from 'src/google-meet/google-meet.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
+import { GoogleMeetService } from '../google-meet/google-meet.service';
 import { CreateInterviewDto } from './dto/create-interview.dto';
 import { EvaluateInterviewDto } from './dto/evaluate-interview.dto';
 

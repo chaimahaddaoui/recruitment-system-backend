@@ -15,6 +15,9 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
+  validateToken(token: string) {
+    throw new Error('Method not implemented.');
+  }
   constructor(
     private jwtService: JwtService,
     private userService: UsersService,
