@@ -10,9 +10,9 @@ pipeline {
   environment {
     JWT_SECRET = 'test-secret-key-for-jenkins-build-recruitment-system'
     NODE_ENV = 'test'
-    DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/recruitment_db?schema=public'
 
-    
+    // Jenkins est dans Docker -> utiliser le nom du service postgres
+    DATABASE_URL = 'postgresql://postgres:postgres@postgres:5432/recruitment_test'
   }
 
   triggers {
@@ -20,122 +20,115 @@ pipeline {
   }
 
   stages {
+
     stage('Checkout') {
       steps {
-        script {
-          echo 'STAGE 1: Checkout du code'
-        }
+        echo '========== STAGE 1 : Checkout =========='
         checkout scm
-        script {
-          echo 'OK: Code recupere'
-        }
       }
     }
 
     stage('Install') {
       steps {
-        script {
-          echo 'STAGE 2: Installation des dependances'
-        }
+        echo '========== STAGE 2 : Installation =========='
+
         sh '''
           npm install
         '''
-        script {
-          echo 'OK: Dependances installees'
-        }
       }
     }
 
-    stage('Prisma Migration') {
+    stage('Prisma Generate & Migration') {
       steps {
-        script {
-          echo 'STAGE 2.5: Migration des tables Prisma'
-        }
+
+        echo '========== STAGE 3 : Prisma =========='
+
         sh '''
+          npx prisma generate
           npx prisma migrate deploy
         '''
-        script {
-          echo 'OK: Tables creees'
-        }
       }
     }
 
     stage('Unit Tests') {
+
       steps {
-        script {
-          echo 'STAGE 3: Tests unitaires'
-        }
+
+        echo '========== STAGE 4 : Unit Tests =========='
+
         sh '''
-          npm test -- --testPathPattern="spec.ts$" --passWithNoTests
+          npm test -- --testPathIgnorePatterns=integration --passWithNoTests
         '''
-        script {
-          echo 'OK: Tests unitaires reussis'
-        }
       }
+
     }
 
+    /*
+    =================================================================
+    Réactiver cette étape plus tard lorsque la base de test sera prête
+    =================================================================
+
     stage('Integration Tests') {
+
       steps {
-        script {
-          echo 'STAGE 4: Tests d\'integration'
-        }
+
+        echo '========== STAGE 5 : Integration Tests =========='
+
         sh '''
           npm test -- --testPathPattern="integration" --passWithNoTests
         '''
-        script {
-          echo 'OK: Tests d\'integration reussis'
-        }
+
       }
+
     }
 
+    */
+
     stage('Build') {
+
       steps {
-        script {
-          echo 'STAGE 5: Build du projet'
-        }
+
+        echo '========== STAGE 5 : Build =========='
+
         sh '''
           npm run build
         '''
-        script {
-          echo 'OK: Build reussi'
-        }
+
       }
+
     }
 
     stage('Archive') {
+
       steps {
-        script {
-          echo 'STAGE 6: Archivage'
-        }
+
+        echo '========== STAGE 6 : Archive =========='
+
         archiveArtifacts(
           artifacts: 'dist/**/*',
           allowEmptyArchive: true
         )
-        script {
-          echo 'OK: Artifacts archives'
-        }
+
       }
+
     }
+
   }
 
   post {
+
+    success {
+      echo 'Pipeline terminé avec succès.'
+    }
+
+    failure {
+      echo 'Pipeline échoué.'
+    }
+
     always {
-      script {
-        echo 'Pipeline termine'
-      }
       cleanWs()
     }
-    
-    success {
-      script {
-        echo 'SUCCESS: Pipeline reussi!'
-      }
-    }
-    
-    failure {
-      script {
-        echo 'FAILURE: Pipeline echoue'
-      }
-    }
+
   }
+
 }
