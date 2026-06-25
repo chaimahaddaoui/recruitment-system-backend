@@ -7,6 +7,11 @@ pipeline {
     timestamps()
   }
 
+  environment {
+    JWT_SECRET = 'test-secret-key-for-jenkins-build-recruitment-system'
+    NODE_ENV = 'test'
+  }
+
   triggers {
     pollSCM('H/5 * * * *')
   }
@@ -117,6 +122,3 @@ pipeline {
     }
   }
 }
-
-
-
