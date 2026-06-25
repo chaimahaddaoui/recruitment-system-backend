@@ -50,7 +50,7 @@ pipeline {
           echo 'STAGE 2.5: Migration des tables Prisma'
         }
         sh '''
-          npx prisma migrate deploy --skip-generate
+          npx prisma migrate deploy
         '''
         script {
           echo 'OK: Tables creees'
