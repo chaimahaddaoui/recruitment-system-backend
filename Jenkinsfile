@@ -44,6 +44,20 @@ pipeline {
       }
     }
 
+    stage('Prisma Migration') {
+      steps {
+        script {
+          echo 'STAGE 2.5: Migration des tables Prisma'
+        }
+        sh '''
+          npx prisma migrate deploy --skip-generate
+        '''
+        script {
+          echo 'OK: Tables creees'
+        }
+      }
+    }
+
     stage('Unit Tests') {
       steps {
         script {
