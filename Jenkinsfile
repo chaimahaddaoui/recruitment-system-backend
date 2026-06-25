@@ -10,7 +10,9 @@ pipeline {
   environment {
     JWT_SECRET = 'test-secret-key-for-jenkins-build-recruitment-system'
     NODE_ENV = 'test'
-    DATABASE_URL = 'postgresql://postgres:postgres@postgres:5432/recruitment_test'
+    DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/recruitment_db?schema=public'
+
+    
   }
 
   triggers {
